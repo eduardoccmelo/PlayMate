@@ -1,4 +1,4 @@
-import playUpLogo from "../assets/playup-logo.png";
+import playMateLogo from "../assets/playmate-logo.png";
 import { useEffect, useState } from "react";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser } from "../types";
@@ -31,7 +31,7 @@ const content = {
     ),
     intro:
       "Crie jogos, cadastre jogadores, monte times equilibrados e participe de jogos em poucos cliques.",
-    enter: "Entrar no PlayUp",
+    enter: "Entrar no PlayMate",
     enterDescription: "Veja seus jogos, grupos e ferramentas de organização.",
   },
   en: {
@@ -45,7 +45,7 @@ const content = {
     ),
     intro:
       "Create games, register players, build balanced teams, and join games in a few clicks.",
-    enter: "Open PlayUp",
+    enter: "Open PlayMate",
     enterDescription: "View your games, groups, and organizer tools.",
   },
 };
@@ -463,7 +463,7 @@ export function LandingPage({
             </svg>
           </button>
         </div>
-        <img className="brand-mark" src={playUpLogo} alt="PlayUp" />
+        <img className="brand-mark" src={playMateLogo} alt="PlayMate" />
       </div>
       <div className="landing-content">
         <section className="landing-hero-copy">

@@ -1,4 +1,4 @@
-# PlayUp application flow
+# PlayMate application flow
 
 **Português:** [resumo em português](#resumo-em-português). This is the product-flow companion to the backend schema.
 
@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart TD
-  A[Open PlayUp] --> B{Local session exists?}
+  A[Open PlayMate] --> B{Local session exists?}
   B -- No --> C[Create profile or sign in]
   C --> D[Email + access code verification]
   D --> E[My groups and My next games]

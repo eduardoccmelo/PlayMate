@@ -8,7 +8,6 @@ import {
 } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import { getStoredValue, saveStoredValue } from "../services/browserStorage";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
@@ -286,9 +285,9 @@ const GuestTag = ({ player, language }: { player: Player; language: "pt" | "en" 
     </small>
   ) : null;
 
-export function PlayUpApp() {
+export function PlayMateApp() {
   const [languagePreference, setLanguage] = useLocalStorage<"pt" | "en" | null>(
-    "playup.language.preference",
+    "playmate.language.preference",
     null,
   );
   const language = languagePreference ?? browserLanguage();
@@ -303,18 +302,18 @@ export function PlayUpApp() {
     | "past-games"
   >("home");
   const [groups, setGroups] = useLocalStorage<PlayerGroup[]>(
-    "playup.groups.v1",
+    "playmate.groups.v1",
     [],
   );
   const [currentUser, setCurrentUser] = useLocalStorage<CurrentUser | null>(
-    "playup.current-user.v1",
+    "playmate.current-user.v1",
     null,
   );
   const [savedProfiles, setSavedProfiles] = useLocalStorage<
     Record<string, SavedProfile>
-  >("playup.saved-profiles.v1", {});
+  >("playmate.saved-profiles.v1", {});
   const [activeGroupId, setActiveGroupId] = useLocalStorage<string | null>(
-    "playup.active-group.v1",
+    "playmate.active-group.v1",
     null,
   );
   const adminGroupIds = currentUser?.adminGroupIds ?? [];
@@ -361,35 +360,6 @@ export function PlayUpApp() {
     });
     if (changed) setGroups(nextGroups);
   }, [groups, setGroups]);
-  useEffect(() => {
-    if (
-      groups.length ||
-      getStoredValue<boolean>("playup.groups.v1.migrated", false)
-    )
-      return;
-
-    const legacyPlayers = getStoredValue<Player[]>("playup.players.v3", []);
-    const legacyGames = getStoredValue<GameSession[]>("playup.sessions.v2", []);
-    const legacyRequests = getStoredValue<ParticipationRequest[]>(
-      "playup.requests.v3",
-      [],
-    );
-    saveStoredValue("playup.groups.v1.migrated", true);
-    if (!legacyPlayers.length && !legacyGames.length && !legacyRequests.length)
-      return;
-
-    setGroups([
-      {
-        id: createGroupId(),
-        name: "Meu grupo",
-        organizerPasscode: "admin",
-        createdAt: new Date().toISOString(),
-        players: legacyPlayers,
-        games: legacyGames,
-        requests: legacyRequests,
-      },
-    ]);
-  }, [groups.length, setGroups]);
   const [gameId, setGameId] = useState<number | null>(null);
   const [returnToDashboardAfterGame, setReturnToDashboardAfterGame] =
     useState(false);

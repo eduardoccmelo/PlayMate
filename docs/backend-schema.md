@@ -1,10 +1,10 @@
-# PlayUp — backend specification
+# PlayMate — backend specification
 
 **Portuguese companion:** a concise Portuguese summary is included at the end. English is the source of truth for implementation decisions.
 
 ## Scope
 
-This document specifies a relational backend for the current PlayUp flow:
+This document specifies a relational backend for the current PlayMate flow:
 
 - one profile can be an admin in one group and a participant in another;
 - a group participant may create and organize an individual game without becoming an admin of that group;
