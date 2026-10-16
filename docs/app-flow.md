@@ -59,7 +59,7 @@ When a participant creates a game, the game records `createdByUserId` and `creat
 
 Each group has exactly one creator-level `owner`; other administrators are `admin`. Only the owner may delete the group (with the group passcode) or change its passcode. An admin may change only the group name. The owner cannot be removed through the admin panel. When an owner leaves, ownership transfers to the most active remaining member, then to the oldest membership on a tie; leaving is blocked when there is no eligible successor. Admins can create an individual invitation for an existing participant to become an admin. Acceptance preserves that person's player membership and adds the admin role.
 
-Admins vote independently on every group player's level (1–5) and mobility (1–3). A vote is saved immediately and the current mean is applied immediately, rounding `.5` upward. A missing vote never blocks the current value or team balancing; that admin may vote later and update the aggregate. An admin never sees, votes on, or manually edits their own level/mobility. They may edit only their own position and condition. Players' own level and mobility are also hidden from their row in game-management lists.
+Admins vote independently on every group player's level (1–5) and mobility (1–3), including their own player. A vote is saved immediately and the current mean is applied immediately, rounding `.5` upward; every admin ballot has equal weight. A missing vote never blocks the current value or team balancing; that admin may vote later and update the aggregate. An admin may register or change their own ballot in the Admin panel, but their final level/mobility stay hidden from their row in game-management lists. They may always edit only their own position and condition.
 
 Manually created players are **Guest** records: they have no user account and are visibly tagged `Convidado`/`Guest` in group and game lists. Their `createdByUserId` records who created them. If an active admin creates a player in the group directory, the level and mobility entered in that creation form are immediately saved as that admin's first votes for the new player. A game-only guest created by a participant organizer does not enter the group-wide voting board.
 
@@ -79,7 +79,7 @@ flowchart TD
   K --> L[First waiting player promoted automatically]
 ```
 
-Names are unique case-insensitively within a group and an active game list. A group member joins immediately; an invited non-member verifies their identity and is placed directly on the main or waiting list. Game-only access never grants group membership.
+Names are unique case-insensitively within a group and an active game list. Creating or joining a group immediately creates or links one group-scoped player profile for that member; the group creator is also its first owner/admin. An invited non-member verifies their identity and is placed directly on the main or waiting list. Game-only access never grants group membership.
 
 ## Team balancing
 

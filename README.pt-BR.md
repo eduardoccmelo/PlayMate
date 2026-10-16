@@ -52,8 +52,9 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - Cada grupo tem exatamente um **criador** e pode ter outros admins. Só o criador pode deletar o grupo ou trocar a senha; um admin comum pode alterar apenas o nome do grupo.
 - O **Painel do admin** reúne estatísticas, convite direcionado para promover um participante, a lista de admins e a votação de atributos.
 - O criador não pode ser removido. Se sair, a hierarquia passa para o membro restante com mais participações confirmadas; em empate, para a associação mais antiga. Sem sucessor elegível, o criador não pode sair.
-- Cada admin vota separadamente para nível `1–5` e velocidade `1–3` de todos os outros jogadores. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
-- Um admin não vê, não vota e não altera o próprio nível/velocidade. Pode alterar apenas a própria posição e condição.
+- Criar ou entrar em um grupo cria ou vincula imediatamente o jogador do próprio membro naquele grupo. Portanto, quem cria o grupo já começa com o papel de criador e um perfil jogável.
+- Os admins registram votos independentes para nível `1–5` e velocidade `1–3`. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
+- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê seu nível/velocidade finais nas listas de gerenciamento do jogo, mas pode registrar ou mudar o próprio voto no Painel do admin; posição e condição continuam editáveis pelo próprio jogador.
 
 ### Participantes, organizadores de jogos e guests
 
@@ -67,7 +68,7 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - Um participante do grupo pode criar um jogo. Ele recebe controles de organizador somente nos jogos que criou: criar jogadores, gerenciar a lista e pagamentos daquele jogo e gerar times. Ele nunca recebe configurações do grupo, estatísticas, atributos do cadastro geral ou controle dos demais jogos.
 - Em jogos criados por participante, nível, posição, condição, velocidade e pontos dos jogadores ficam ocultos para esse organizador.
 - Nomes não podem ser duplicados dentro de um grupo ou de uma lista ativa de jogo.
-- Jogador criado manualmente recebe a etiqueta **Convidado**. Não possui conta nem acesso ao app e guarda quem o criou. Quando um admin o cria, o nível e a velocidade escolhidos já entram como o voto inicial desse admin.
+- Um membro entra sem aprovação usando o próprio jogador vinculado; se ele ainda não existir no grupo, é criado automaticamente. Jogador criado manualmente recebe a etiqueta **Convidado**. Não possui conta nem acesso ao app e guarda quem o criou. Quando um admin o cria, o nível e a velocidade escolhidos já entram como o voto inicial desse admin.
 
 ### Jogos
 

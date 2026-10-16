@@ -135,7 +135,12 @@ export function AdminPanel({
 
       <section className="panel admin-panel-section skill-voting-section">
         <h2>{localize("Votação de atributos", language)}</h2>
-        <p className="admin-panel-help">{localize("Cada voto atualiza a média imediatamente. Você não pode ver nem votar seu próprio nível ou velocidade.", language)}</p>
+        <p className="admin-panel-help">
+          {localize(
+            "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.",
+            language,
+          )}
+        </p>
         {eligiblePlayers.map((player) => {
           const isSelf = isOwnPlayer(player);
           const votes = (group.skillVotes ?? []).filter((vote) => vote.playerId === player.id);
@@ -144,32 +149,27 @@ export function AdminPanel({
           const averageLevel = levelVotes.length ? levelVotes.reduce((sum, vote) => sum + (vote.level ?? 0), 0) / levelVotes.length : null;
           const averageSpeed = speedVotes.length ? speedVotes.reduce((sum, vote) => sum + (vote.mobility ?? 0), 0) / speedVotes.length : null;
           const ownVote = votes.find((vote) => vote.adminUserId === user.id);
-          const eligibleAdminCount = admins.filter(
-            (admin) => admin.playerId !== player.id && admin.userId !== player.ownerUserId,
-          ).length;
           return (
             <article className="skill-vote-row" key={player.id}>
               <div className="skill-vote-player">
                 <strong>{player.name}</strong>
                 {isSelf ? (
-                  <small>{localize("Seu nível e velocidade são definidos pelos outros admins.", language)}</small>
+                  <small>{localize("Seu voto será combinado com os votos dos outros admins.", language)}</small>
                 ) : (
-                  <small>{levelVotes.length || speedVotes.length ? <>{localize("Média atual", language)}: {averageLevel?.toFixed(1) ?? "—"} · {averageSpeed ? localize(mobilityFromScore(Math.round(averageSpeed)), language) : "—"} · {localize("Votos", language)}: {levelVotes.length}/{eligibleAdminCount}</> : localize("Sem votos ainda", language)}</small>
+                  <small>{levelVotes.length || speedVotes.length ? <>{localize("Média atual", language)}: {averageLevel?.toFixed(1) ?? "—"} · {averageSpeed ? localize(mobilityFromScore(Math.round(averageSpeed)), language) : "—"} · {localize("Votos", language)}: {levelVotes.length}/{admins.length}</> : localize("Sem votos ainda", language)}</small>
                 )}
               </div>
-              {!isSelf && (
-                <div className="skill-vote-controls">
-                  <fieldset>
-                    <legend>{localize("Nível", language)}</legend>
-                    {[1, 2, 3, 4, 5].map((value) => <button className={ownVote?.level === value ? "selected" : ""} key={value} onClick={() => onVote(player.id, "level", ownVote?.level === value ? null : value)}>{value}</button>)}
-                  </fieldset>
-                  <span aria-hidden="true" className="skill-vote-divider" />
-                  <fieldset>
-                    <legend>{localize("Velocidade", language)}</legend>
-                    {[1, 2, 3].map((value) => <button className={ownVote?.mobility === value ? "selected" : ""} key={value} onClick={() => onVote(player.id, "mobility", ownVote?.mobility === value ? null : value)}>{value}</button>)}
-                  </fieldset>
-                </div>
-              )}
+              <div className="skill-vote-controls">
+                <fieldset>
+                  <legend>{localize("Nível", language)}</legend>
+                  {[1, 2, 3, 4, 5].map((value) => <button className={ownVote?.level === value ? "selected" : ""} key={value} onClick={() => onVote(player.id, "level", ownVote?.level === value ? null : value)}>{value}</button>)}
+                </fieldset>
+                <span aria-hidden="true" className="skill-vote-divider" />
+                <fieldset>
+                  <legend>{localize("Velocidade", language)}</legend>
+                  {[1, 2, 3].map((value) => <button className={ownVote?.mobility === value ? "selected" : ""} key={value} onClick={() => onVote(player.id, "mobility", ownVote?.mobility === value ? null : value)}>{value}</button>)}
+                </fieldset>
+              </div>
             </article>
           );
         })}

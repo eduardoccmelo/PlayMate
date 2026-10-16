@@ -183,7 +183,7 @@ create unique index player_profiles_one_owned_group_profile_idx
   where group_id is not null and owner_user_id is not null;
 ~~~
 
-Group profiles may exist without an account. `is_guest = true` identifies a manually created/admin-managed **Guest** with no linked user account; the UI must label it `Convidado`/`Guest`. `created_by_user_id` records the user accountable for that manual creation. When a user joins a group, the service creates or links one owned profile in that group; Join then uses it automatically. A verified user who enters by game code receives or reuses an owned profile with game-only access and cannot browse the group directory; it is not a manual Guest.
+Group profiles may exist without an account. `is_guest = true` identifies a manually created/admin-managed **Guest** with no linked user account; the UI must label it `Convidado`/`Guest`. `created_by_user_id` records the user accountable for that manual creation. Creating or joining a group must atomically create or link one owned, group-scoped profile for that user; a group creator therefore becomes both the owner and a player in the same transaction. A verified user who enters by game code receives or reuses an owned profile with game-only access and cannot browse the group directory; it is not a manual Guest.
 
 ### Admin skill voting
 
@@ -207,7 +207,7 @@ create table player_skill_votes (
 );
 ~~~
 
-Only active admins may vote. An admin cannot read, write, or manually override their own `level` or `mobility`; they may still edit their own position and condition. Votes remain open indefinitely: every valid vote immediately recomputes the average over submitted ballots, rounded half-up, and updates the group player profile. Missing/admin-absent ballots never block team balancing. A later vote changes the aggregate immediately and leaves an audit trail through `updated_at` (or a separate append-only audit table in production).
+Only active admins may vote, including on their own `level` or `mobility`; every active-admin ballot has equal weight. The Admin panel may show the admin's own selected ballot, but game-management lists must still hide that user's final level and mobility. Admins may edit their own position and condition. Votes remain open indefinitely: every valid vote immediately recomputes the average over submitted ballots, rounded half-up, and updates the group player profile. Missing/admin-absent ballots never block team balancing. A later vote changes the aggregate immediately and leaves an audit trail through `updated_at` (or a separate append-only audit table in production).
 
 When an active admin manually creates a player, persist `created_by_user_id` and insert that creator's initial level and mobility ballots in the same transaction. A manual player created by a non-admin for a game-only roster remains a guest for that game and must not create a group-wide ballot.
 
@@ -419,7 +419,7 @@ Every active group admin receives their own recipient row. Dismissing a message 
 
 ## Mandatory business rules
 
-1. Creating a group creates an active **owner** membership for its creator.
+1. Creating a group atomically creates an active **owner** membership and one owned, group-scoped player profile for its creator.
 2. Only active group owners/admins may manage the group player directory and statistics, manage any group game, create group-admin invitations, or manage admins. Admins may rename the group; only the active **owner** may change its passcode or delete it after passcode confirmation. Admins may not remove/demote the owner.
 3. When an owner leaves, ownership transfers to the active member with the most confirmed game participations; ties are resolved by oldest membership. The owner cannot leave when no eligible successor exists.
 4. An active group participant may create a game. They may manage only a game they created (roster, payments, player creation, and balancing), without access to group administration, statistics, player skills, or other games' management.
@@ -434,7 +434,7 @@ Every active group admin receives their own recipient row. Dismissing a message 
 13. Changing a group passcode requires the current passcode and does not invalidate existing memberships.
 14. Balancing includes only paid confirmed main-list participants. Standard quota: two balances for an admin-created game, one for a participant-created game; automatic and manual balances share it. One final manual rebalance opens 15 minutes before the current scheduled start and remains available until the current game end. A date/time or duration reschedule moves that window atomically, but roster/payment/date/time changes never reset a quota or create an additional final rebalance. Every balance action must reject a finished game.
 15. Finished games are immutable to both admins and participants except for deletion by the authorized owner. Their API representation is read-only and may include the latest valid team-balance snapshot.
-16. Admin skill votes are incremental: each vote recalculates the current level/mobility average; no unanimous or complete quorum is required. A player never votes on or sees their own level/mobility in game-management lists.
+16. Admin skill votes are incremental: each vote recalculates the current level/mobility average; no unanimous or complete quorum is required. Every active admin, including the player, may vote with equal weight. A player never sees their own final level/mobility in game-management lists, although they can register their own ballot in the Admin panel.
 
 ## Suggested HTTP API
 

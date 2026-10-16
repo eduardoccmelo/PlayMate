@@ -52,13 +52,14 @@ PlayMate is a web application for organizing group sports games. One profile can
 - Every group has exactly one **owner** (the creator) and may have additional admins. The owner alone can delete the group and change its passcode; an admin can change only the group name.
 - The **Admin panel** contains group statistics, targeted invitations to promote an existing participant, the active admin list, and the skill-voting board.
 - The owner cannot be removed. If the owner leaves, ownership is transferred to the remaining member with the most confirmed participations; ties go to the oldest membership. An owner cannot leave without an eligible successor.
-- Each admin votes independently for every other group player: level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
-- An admin never sees, votes on, or changes their own level/speed. They can update their own position and condition.
+- Creating or joining a group immediately creates or links the member's own player profile in that group. A group creator therefore starts with both the owner role and a playable profile.
+- Admins submit independent ratings for level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
+- Every admin votes on every group player, including themselves. Each ballot has the same weight in the immediately applied, half-up average. A user does not see their own final level/speed in game-management lists, but can register or change their own vote in the Admin panel; position and condition remain editable by the player.
 
 ### Participants, game organizers, and guests
 
 - View groups and personal upcoming games from one dashboard.
-- A group member joins with their linked player name without approval.
+- A group member joins with their linked player name without approval; the profile is created automatically if it does not yet exist.
 - Membership, self-service payments, and organizer authority are resolved from the stable profile ID, never by a matching display name.
 - When a game is full, joining places the player on its waiting list.
 - A non-member can add a game by code, verify their identity, and join the main or waiting list without joining its group.
