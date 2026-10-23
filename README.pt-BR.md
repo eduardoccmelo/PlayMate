@@ -1,8 +1,8 @@
-# PlayUp
+# PlayMate
 
 **[Read in English](README.md)**
 
-PlayUp é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
+PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
 
 > O projeto está atualmente em modo MVP. Dados, permissões e recuperação de perfil são simulados no navegador. As telas de e-mail/código de acesso geram um código local de demonstração, de uso único e com validade de cinco minutos; ainda não há backend, envio real de e-mail, autenticação real nem sincronização entre dispositivos.
 
@@ -52,8 +52,9 @@ PlayUp é uma aplicação web para organizar partidas esportivas em grupo. Um me
 - Cada grupo tem exatamente um **criador** e pode ter outros admins. Só o criador pode deletar o grupo ou trocar a senha; um admin comum pode alterar apenas o nome do grupo.
 - O **Painel do admin** reúne estatísticas, convite direcionado para promover um participante, a lista de admins e a votação de atributos.
 - O criador não pode ser removido. Se sair, a hierarquia passa para o membro restante com mais participações confirmadas; em empate, para a associação mais antiga. Sem sucessor elegível, o criador não pode sair.
-- Cada admin vota separadamente para nível `1–5` e velocidade `1–3` de todos os outros jogadores. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
-- Um admin não vê, não vota e não altera o próprio nível/velocidade. Pode alterar apenas a própria posição e condição.
+- Criar ou entrar em um grupo cria ou vincula imediatamente o jogador do próprio membro naquele grupo. Portanto, quem cria o grupo já começa com o papel de criador e um perfil jogável.
+- Os admins registram votos independentes para nível `1–5` e velocidade `1–3`. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
+- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê seu nível/velocidade finais nas listas de gerenciamento do jogo, mas pode registrar ou mudar o próprio voto no Painel do admin; posição e condição continuam editáveis pelo próprio jogador.
 
 ### Participantes, organizadores de jogos e guests
 
@@ -67,7 +68,7 @@ PlayUp é uma aplicação web para organizar partidas esportivas em grupo. Um me
 - Um participante do grupo pode criar um jogo. Ele recebe controles de organizador somente nos jogos que criou: criar jogadores, gerenciar a lista e pagamentos daquele jogo e gerar times. Ele nunca recebe configurações do grupo, estatísticas, atributos do cadastro geral ou controle dos demais jogos.
 - Em jogos criados por participante, nível, posição, condição, velocidade e pontos dos jogadores ficam ocultos para esse organizador.
 - Nomes não podem ser duplicados dentro de um grupo ou de uma lista ativa de jogo.
-- Jogador criado manualmente recebe a etiqueta **Convidado**. Não possui conta nem acesso ao app e guarda quem o criou. Quando um admin o cria, o nível e a velocidade escolhidos já entram como o voto inicial desse admin.
+- Um membro entra sem aprovação usando o próprio jogador vinculado; se ele ainda não existir no grupo, é criado automaticamente. Jogador criado manualmente recebe a etiqueta **Convidado**. Não possui conta nem acesso ao app e guarda quem o criou. Quando um admin o cria, o nível e a velocidade escolhidos já entram como o voto inicial desse admin.
 
 ### Jogos
 
@@ -103,7 +104,7 @@ Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo l
 - Idioma inicial baseado no navegador: português para navegadores em português e inglês como padrão para os demais.
 - Troca manual de idioma no cabeçalho de todas as páginas.
 - Layout responsivo para desktop e celular.
-- Logotipo PlayUp no cabeçalho; clicar nele leva à página inicial quando aplicável.
+- Logotipo PlayMate no cabeçalho; clicar nele leva à página inicial quando aplicável.
 
 ## Fluxo atual do protótipo
 
@@ -145,7 +146,7 @@ Esses códigos servem somente para testar a interface. Em produção, devem ser 
 
 ## Balanceamento dos times
 
-Somente jogadores pagos na lista principal entram no balanceamento; jogadores não pagos e da lista de espera nunca entram. A geração manual exige pelo menos dois jogadores pagos. Quando a lista principal está completa e todos estão pagos, o PlayUp gera automaticamente o primeiro balanceamento disponível.
+Somente jogadores pagos na lista principal entram no balanceamento; jogadores não pagos e da lista de espera nunca entram. A geração manual exige pelo menos dois jogadores pagos. Quando a lista principal está completa e todos estão pagos, o PlayMate gera automaticamente o primeiro balanceamento disponível.
 
 O limite é propositalmente pequeno: o balanceamento deve ser a etapa final da preparação, de preferência no dia do jogo. Uma mudança real na lista ou no pagamento invalida os times exibidos e pode consumir o próximo balanceamento automático disponível, mas nunca reinicia o limite. Uma substituição só não recalcula quando os atributos finais de balanceamento forem idênticos: posição, nível, velocidade e condição. A ID e a ordem na lista não interferem nessa comparação. Ao remarcar o jogo, a abertura da janela final é recalculada a partir do novo horário, mas a cota normal e o único rebalanceamento final nunca são reiniciados. A última tentativa abre 15 minutos antes do início e permanece disponível até o último segundo do jogo; todo balanceamento é desativado quando ele termina. Quando um admin antecipa o jogo, o aviso de disponibilidade mostra quem fez a alteração; se o rebalanceamento final for usado, essa autoria também fica registrada no histórico. Não é possível criar um jogo com data/hora de início igual ou anterior ao horário local atual.
 
@@ -212,7 +213,7 @@ Todos os novos jogadores começam com os valores padrão: nível 3, velocidade n
 
 ```bash
 git clone <URL_DO_REPOSITORIO>
-cd playup
+cd playmate
 npm install
 ```
 
@@ -248,7 +249,7 @@ src/
 ├── components/
 │   ├── LandingPage.tsx     # Página inicial e escolha de perfil
 │   ├── GroupSelector.tsx   # Grupos, senha e administração de grupos
-│   ├── PlayUpApp.tsx       # Estado e fluxos principais da aplicação
+│   ├── PlayMateApp.tsx     # Estado e fluxos principais da aplicação
 │   ├── GameForm.tsx        # Formulário de criar/editar jogos
 │   ├── PlayerDirectoryManager.tsx
 │   ├── ReadOnlyGame.tsx

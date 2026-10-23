@@ -8,7 +8,6 @@ import {
 } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
-import { getStoredValue, saveStoredValue } from "../services/browserStorage";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
@@ -23,6 +22,7 @@ import type {
   Player,
   PlayerGroup,
   CurrentUser,
+  PlayerSkillVote,
 } from "../types";
 import { localize } from "../i18n";
 import { GameForm } from "./GameForm";
@@ -274,6 +274,50 @@ const createOwnedPlayer = (players: Player[], user: CurrentUser): Player => ({
   condition: "neutro",
   position: "neutro",
 });
+const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
+  const existingPlayer =
+    group.players.find((player) => player.ownerUserId === user.id) ??
+    group.players.find(
+      (player) => normalizeText(player.name) === normalizeText(user.displayName),
+    );
+  const player: Player = existingPlayer
+    ? {
+        ...existingPlayer,
+        ownerUserId: user.id,
+        isGuest: false,
+        accessScope: "group",
+      }
+    : createOwnedPlayer(group.players, user);
+  return {
+    group: {
+      ...group,
+      players: existingPlayer
+        ? group.players.map((candidate) =>
+            candidate.id === player.id ? player : candidate,
+          )
+        : [...group.players, player],
+    },
+    player,
+  };
+};
+const mobilityFromScore = (score: number): Mobility =>
+  score === 1 ? "lento" : score === 3 ? "rapido" : "neutro";
+const averageLevel = (votes: PlayerSkillVote[], fallback: number) => {
+  const values = votes.flatMap((vote) => (vote.level === undefined ? [] : [vote.level]));
+  return values.length
+    ? Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5)
+    : fallback;
+};
+const averageMobility = (votes: PlayerSkillVote[], fallback: Mobility) => {
+  const values = votes.flatMap((vote) =>
+    vote.mobility === undefined ? [] : [vote.mobility],
+  );
+  return values.length
+    ? mobilityFromScore(
+        Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5),
+      )
+    : fallback;
+};
 const TrashIcon = () => (
   <svg aria-hidden="true" className="trash-icon" viewBox="0 0 24 24">
     <path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13" />
@@ -286,9 +330,9 @@ const GuestTag = ({ player, language }: { player: Player; language: "pt" | "en" 
     </small>
   ) : null;
 
-export function PlayUpApp() {
+export function PlayMateApp() {
   const [languagePreference, setLanguage] = useLocalStorage<"pt" | "en" | null>(
-    "playup.language.preference",
+    "playmate.language.preference",
     null,
   );
   const language = languagePreference ?? browserLanguage();
@@ -303,18 +347,18 @@ export function PlayUpApp() {
     | "past-games"
   >("home");
   const [groups, setGroups] = useLocalStorage<PlayerGroup[]>(
-    "playup.groups.v1",
+    "playmate.groups.v1",
     [],
   );
   const [currentUser, setCurrentUser] = useLocalStorage<CurrentUser | null>(
-    "playup.current-user.v1",
+    "playmate.current-user.v1",
     null,
   );
   const [savedProfiles, setSavedProfiles] = useLocalStorage<
     Record<string, SavedProfile>
-  >("playup.saved-profiles.v1", {});
+  >("playmate.saved-profiles.v1", {});
   const [activeGroupId, setActiveGroupId] = useLocalStorage<string | null>(
-    "playup.active-group.v1",
+    "playmate.active-group.v1",
     null,
   );
   const adminGroupIds = currentUser?.adminGroupIds ?? [];
@@ -361,35 +405,6 @@ export function PlayUpApp() {
     });
     if (changed) setGroups(nextGroups);
   }, [groups, setGroups]);
-  useEffect(() => {
-    if (
-      groups.length ||
-      getStoredValue<boolean>("playup.groups.v1.migrated", false)
-    )
-      return;
-
-    const legacyPlayers = getStoredValue<Player[]>("playup.players.v3", []);
-    const legacyGames = getStoredValue<GameSession[]>("playup.sessions.v2", []);
-    const legacyRequests = getStoredValue<ParticipationRequest[]>(
-      "playup.requests.v3",
-      [],
-    );
-    saveStoredValue("playup.groups.v1.migrated", true);
-    if (!legacyPlayers.length && !legacyGames.length && !legacyRequests.length)
-      return;
-
-    setGroups([
-      {
-        id: createGroupId(),
-        name: "Meu grupo",
-        organizerPasscode: "admin",
-        createdAt: new Date().toISOString(),
-        players: legacyPlayers,
-        games: legacyGames,
-        requests: legacyRequests,
-      },
-    ]);
-  }, [groups.length, setGroups]);
   const [gameId, setGameId] = useState<number | null>(null);
   const [returnToDashboardAfterGame, setReturnToDashboardAfterGame] =
     useState(false);
@@ -525,6 +540,51 @@ export function PlayUpApp() {
           },
     );
   }, [currentUser, setCurrentUser, setGroups]);
+  useEffect(() => {
+    if (!currentUser?.emailVerified) return;
+    setGroups((currentGroups) => {
+      let changed = false;
+      const nextGroups = currentGroups.map((group) => {
+        const membership = (group.admins ?? []).find(
+          (admin) => admin.userId === currentUser.id,
+        );
+        const isMember = Boolean(
+          membership ||
+            (currentUser.adminGroupIds ?? []).includes(group.id) ||
+            group.players.some(
+              (player) =>
+                player.ownerUserId === currentUser.id &&
+                player.accessScope !== "game",
+            ),
+        );
+        if (!isMember) return group;
+        const { group: groupWithPlayer, player } = ensureGroupPlayer(
+          group,
+          currentUser,
+        );
+        const admins = membership
+          ? (groupWithPlayer.admins ?? []).map((admin) =>
+              admin.userId === currentUser.id &&
+              (admin.playerId !== player.id ||
+                admin.displayName !== currentUser.displayName)
+                ? {
+                    ...admin,
+                    playerId: player.id,
+                    displayName: currentUser.displayName,
+                  }
+                : admin,
+            )
+          : groupWithPlayer.admins;
+        const nextGroup =
+          admins === groupWithPlayer.admins
+            ? groupWithPlayer
+            : { ...groupWithPlayer, admins };
+        changed ||= nextGroup !== group;
+        return nextGroup;
+      });
+      return changed ? nextGroups : currentGroups;
+    });
+  }, [currentUser, setGroups]);
   const currentUserFirst = useCallback(
     (first: Player, second: Player) => {
       const firstIsCurrent = isCurrentUserPlayer(first, currentUser);
@@ -1411,16 +1471,19 @@ export function PlayUpApp() {
           setProfileRequested(true);
         }}
         onCreate={(name, organizerPasscode) => {
+          const ownerPlayer = currentUser
+            ? createOwnedPlayer([], currentUser)
+            : null;
           const group: PlayerGroup = {
             id: createGroupId(),
             name,
             organizerPasscode,
             createdAt: new Date().toISOString(),
-            players: [],
+            players: ownerPlayer ? [ownerPlayer] : [],
             games: [],
             requests: [],
             admins: currentUser
-              ? [{ userId: currentUser.id, displayName: currentUser.displayName, role: "owner", joinedAt: new Date().toISOString() }]
+              ? [{ userId: currentUser.id, playerId: ownerPlayer?.id, displayName: currentUser.displayName, role: "owner", joinedAt: new Date().toISOString() }]
               : [],
             skillVotes: [],
           };
@@ -1498,54 +1561,54 @@ export function PlayUpApp() {
               return "Este convite de admin pertence a outro participante.";
             }
           }
-          if (
-            currentUser &&
-            !group.players.some(
-              (player) =>
-                player.ownerUserId === currentUser.id &&
-                player.accessScope !== "game",
-            )
-          ) {
-            const sameName = group.players.find(
-              (player) =>
-                normalizeText(player.name) ===
-                normalizeText(currentUser.displayName),
-            );
-            const player: Player = sameName
-              ? {
-                  ...sameName,
-                  ownerUserId: currentUser.id,
-                  isGuest: false,
-                  accessScope: "group",
-                }
-              : createOwnedPlayer(group.players, currentUser);
+          if (currentUser) {
             setGroups((currentGroups) =>
-              currentGroups.map((candidate) =>
-                candidate.id !== group.id
-                  ? candidate
-                  : {
-                      ...candidate,
-                      players: sameName
-                        ? candidate.players.map((item) =>
-                            item.id === sameName.id ? player : item,
-                          )
-                        : [...candidate.players, player],
-                    },
-              ),
+              currentGroups.map((candidate) => {
+                if (candidate.id !== group.id) return candidate;
+                const { group: groupWithPlayer, player } = ensureGroupPlayer(
+                  candidate,
+                  currentUser,
+                );
+                if (!adminGroup || candidate.id !== adminGroup.id) {
+                  return groupWithPlayer;
+                }
+                const previousAdmins = groupWithPlayer.admins ?? [];
+                const alreadyAdmin = previousAdmins.some(
+                  (admin) => admin.userId === currentUser.id,
+                );
+                const admins = alreadyAdmin
+                  ? previousAdmins.map((admin) =>
+                      admin.userId === currentUser.id
+                        ? {
+                            ...admin,
+                            playerId: player.id,
+                            displayName: currentUser.displayName,
+                          }
+                        : admin,
+                    )
+                  : [
+                      ...previousAdmins,
+                      {
+                        userId: currentUser.id,
+                        playerId: player.id,
+                        displayName: currentUser.displayName,
+                        role: "admin" as const,
+                        joinedAt: new Date().toISOString(),
+                      },
+                    ];
+                const groupWithAdmin = {
+                  ...groupWithPlayer,
+                  admins,
+                  adminInvites: targetedAdminInvite
+                    ? (groupWithPlayer.adminInvites ?? []).filter(
+                        (invite) =>
+                          invite.code !== targetedAdminInvite.invite.code,
+                      )
+                    : groupWithPlayer.adminInvites,
+                };
+                return groupWithAdmin;
+              }),
             );
-          }
-          if (adminGroup && currentUser) {
-            setGroups((currentGroups) => currentGroups.map((candidate) => {
-              if (candidate.id !== adminGroup.id || (candidate.admins ?? []).some((admin) => admin.userId === currentUser.id)) return candidate;
-              const ownedPlayer = candidate.players.find((player) => player.ownerUserId === currentUser.id);
-              return {
-                ...candidate,
-                admins: [...(candidate.admins ?? []), { userId: currentUser.id, playerId: ownedPlayer?.id, displayName: currentUser.displayName, role: "admin", joinedAt: new Date().toISOString() }],
-                adminInvites: targetedAdminInvite
-                  ? (candidate.adminInvites ?? []).filter((invite) => invite.code !== targetedAdminInvite.invite.code)
-                  : candidate.adminInvites,
-              };
-            }));
           }
           setCurrentUser((user) =>
             !user
@@ -1889,13 +1952,7 @@ export function PlayUpApp() {
             const actor = (group.admins ?? []).find(
               (admin) => admin.userId === currentUser.id,
             );
-            if (
-              !player ||
-              !actor ||
-              player.ownerUserId === currentUser.id ||
-              actor.playerId === player.id
-            )
-              return group;
+            if (!player || !actor) return group;
             const previous = (group.skillVotes ?? []).find((vote) => vote.playerId === playerId && vote.adminUserId === currentUser.id);
             const nextVote = { playerId, adminUserId: currentUser.id, level: previous?.level, mobility: previous?.mobility, [field]: value ?? undefined, updatedAt: new Date().toISOString() };
             const skillVotes = [
@@ -1903,14 +1960,16 @@ export function PlayUpApp() {
               ...((nextVote.level === undefined && nextVote.mobility === undefined) ? [] : [nextVote]),
             ];
             const votes = skillVotes.filter((vote) => vote.playerId === playerId);
-            const levelVotes = votes.filter((vote) => vote.level !== undefined);
-            const mobilityVotes = votes.filter((vote) => vote.mobility !== undefined);
-            const level = levelVotes.length ? Math.floor(levelVotes.reduce((sum, vote) => sum + (vote.level ?? 0), 0) / levelVotes.length + 0.5) : player.level;
-            const mobilityScore = mobilityVotes.length ? Math.floor(mobilityVotes.reduce((sum, vote) => sum + (vote.mobility ?? 0), 0) / mobilityVotes.length + 0.5) : player.mobility === "lento" ? 1 : player.mobility === "rapido" ? 3 : 2;
+            const level = averageLevel(votes, player.level);
+            const mobility = averageMobility(votes, player.mobility);
             return {
               ...group,
               skillVotes,
-              players: group.players.map((candidate) => candidate.id !== playerId ? candidate : { ...candidate, level, mobility: mobilityScore === 1 ? "lento" : mobilityScore === 3 ? "rapido" : "neutro" }),
+              players: group.players.map((candidate) =>
+                candidate.id !== playerId
+                  ? candidate
+                  : { ...candidate, level, mobility },
+              ),
             };
           }));
         }}
@@ -2278,6 +2337,77 @@ export function PlayUpApp() {
           language={language}
           players={players}
           currentUser={currentUser}
+          canVoteOwnSkills={Boolean(
+            currentUser &&
+              activeGroup?.admins?.some(
+                (admin) => admin.userId === currentUser.id,
+              ),
+          )}
+          ownSkillVote={(() => {
+            const ownPlayer = players.find((player) =>
+              isCurrentUserPlayer(player, currentUser),
+            );
+            return ownPlayer
+              ? (activeGroup?.skillVotes ?? []).find(
+                  (vote) =>
+                    vote.playerId === ownPlayer.id &&
+                    vote.adminUserId === currentUser?.id,
+                )
+              : undefined;
+          })()}
+          onSaveOwnSkillVote={(playerId, level, mobility) => {
+            if (!currentUser || !activeGroup) return;
+            const mobilityVote =
+              mobility === "lento" ? 1 : mobility === "rapido" ? 3 : 2;
+            setGroups((currentGroups) =>
+              currentGroups.map((group) => {
+                if (group.id !== activeGroup.id) return group;
+                const player = group.players.find(
+                  (candidate) => candidate.id === playerId,
+                );
+                const actor = (group.admins ?? []).find(
+                  (admin) => admin.userId === currentUser.id,
+                );
+                const isOwnPlayer =
+                  player?.ownerUserId === currentUser.id ||
+                  actor?.playerId === playerId;
+                if (!player || !actor || !isOwnPlayer) return group;
+                const previous = (group.skillVotes ?? []).find(
+                  (vote) =>
+                    vote.playerId === playerId &&
+                    vote.adminUserId === currentUser.id,
+                );
+                const skillVotes = [
+                  ...(group.skillVotes ?? []).filter(
+                    (vote) => vote !== previous,
+                  ),
+                  {
+                    playerId,
+                    adminUserId: currentUser.id,
+                    level,
+                    mobility: mobilityVote as 1 | 2 | 3,
+                    updatedAt: new Date().toISOString(),
+                  },
+                ];
+                const votes = skillVotes.filter(
+                  (vote) => vote.playerId === playerId,
+                );
+                return {
+                  ...group,
+                  skillVotes,
+                  players: group.players.map((candidate) =>
+                    candidate.id !== playerId
+                      ? candidate
+                      : {
+                          ...candidate,
+                          level: averageLevel(votes, candidate.level),
+                          mobility: averageMobility(votes, candidate.mobility),
+                        },
+                  ),
+                };
+              }),
+            );
+          }}
           onAddPlayer={(player) => {
             if (
               players.some(

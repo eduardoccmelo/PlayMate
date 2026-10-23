@@ -85,6 +85,10 @@ export const translations: Record<
     "Votação de atributos": "Attribute voting",
     "Cada voto atualiza a média imediatamente. Você não pode ver nem votar seu próprio nível ou velocidade.":
       "Each vote updates the average immediately. You cannot see or vote on your own level or speed.",
+    "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.":
+      "Each admin votes for every player, including themselves. Each vote updates the average immediately.",
+    "Seu voto será combinado com os votos dos outros admins.":
+      "Your vote will be combined with the other admins' votes.",
     "Seu nível e velocidade são definidos pelos outros admins.":
       "Your level and speed are defined by the other admins.",
     "Média atual": "Current average",

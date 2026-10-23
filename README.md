@@ -1,8 +1,8 @@
-# PlayUp
+# PlayMate
 
 **[Leia em português](README.pt-BR.md)**
 
-PlayUp is a web application for organizing group sports games. One profile can manage some groups, participate in others, and keep a separate list of upcoming games.
+PlayMate is a web application for organizing group sports games. One profile can manage some groups, participate in others, and keep a separate list of upcoming games.
 
 > This project is currently an MVP. Data, permissions, and profile recovery are simulated in browser storage. The email/access-code screens generate a local one-time demo code that expires after five minutes; there is no backend, real email delivery, authentication, or cross-device synchronization yet.
 
@@ -52,13 +52,14 @@ PlayUp is a web application for organizing group sports games. One profile can m
 - Every group has exactly one **owner** (the creator) and may have additional admins. The owner alone can delete the group and change its passcode; an admin can change only the group name.
 - The **Admin panel** contains group statistics, targeted invitations to promote an existing participant, the active admin list, and the skill-voting board.
 - The owner cannot be removed. If the owner leaves, ownership is transferred to the remaining member with the most confirmed participations; ties go to the oldest membership. An owner cannot leave without an eligible successor.
-- Each admin votes independently for every other group player: level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
-- An admin never sees, votes on, or changes their own level/speed. They can update their own position and condition.
+- Creating or joining a group immediately creates or links the member's own player profile in that group. A group creator therefore starts with both the owner role and a playable profile.
+- Admins submit independent ratings for level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
+- Every admin votes on every group player, including themselves. Each ballot has the same weight in the immediately applied, half-up average. A user does not see their own final level/speed in game-management lists, but can register or change their own vote in the Admin panel; position and condition remain editable by the player.
 
 ### Participants, game organizers, and guests
 
 - View groups and personal upcoming games from one dashboard.
-- A group member joins with their linked player name without approval.
+- A group member joins with their linked player name without approval; the profile is created automatically if it does not yet exist.
 - Membership, self-service payments, and organizer authority are resolved from the stable profile ID, never by a matching display name.
 - When a game is full, joining places the player on its waiting list.
 - A non-member can add a game by code, verify their identity, and join the main or waiting list without joining its group.
@@ -103,7 +104,7 @@ Games are displayed in chronological order. A completed game always uses the sam
 - Initial language is based on browser language: Portuguese for Portuguese browsers, English otherwise.
 - Manual language switching is available in the header on every page.
 - Responsive desktop and mobile layout.
-- PlayUp branding in the header; clicking the logo returns to the appropriate home screen.
+- PlayMate branding in the header; clicking the logo returns to the appropriate home screen.
 
 ## Current prototype flow
 
@@ -145,7 +146,7 @@ These formats are for UI testing only. Production must use random, revocable ser
 
 ## Team balancing
 
-Only paid players in the confirmed main list enter team balancing; unpaid players and waiting-list players never do. Manual generation needs at least two paid players. When the main list is full and every listed player is paid, PlayUp generates the first available balance automatically.
+Only paid players in the confirmed main list enter team balancing; unpaid players and waiting-list players never do. Manual generation needs at least two paid players. When the main list is full and every listed player is paid, PlayMate generates the first available balance automatically.
 
 The quota is intentionally small: balancing should be the final preparation step, preferably on game day. A real roster or payment change invalidates the displayed teams and can consume the next available automatic balance, but never resets the quota. A substitute does not rebalance only when the final balance inputs are identical: position, level, mobility, and condition. IDs and list order alone do not affect this comparison. Rescheduling a game recalculates the final-rebalance opening from its new kickoff, but never resets the standard quota or grants another final rebalance. The final attempt opens 15 minutes before kickoff and remains available through the last second of the game; all balancing is disabled when the game ends. If an admin brings the game forward, the early-availability notice identifies that admin; if the final rebalance is used, the same attribution is retained in its history entry. A game cannot be created with a start date/time at or before the current local time.
 
@@ -212,7 +213,7 @@ New players always start with level 3, neutral speed, neutral condition, and neu
 
 ```bash
 git clone <REPOSITORY_URL>
-cd playup
+cd playmate
 npm install
 ```
 
@@ -248,7 +249,7 @@ src/
 ├── components/
 │   ├── LandingPage.tsx     # Landing page and role choice
 │   ├── GroupSelector.tsx   # Groups, passcodes, and group administration
-│   ├── PlayUpApp.tsx       # Primary application state and flows
+│   ├── PlayMateApp.tsx     # Primary application state and flows
 │   ├── GameForm.tsx        # Create/edit game form
 │   ├── PlayerDirectoryManager.tsx
 │   ├── ReadOnlyGame.tsx

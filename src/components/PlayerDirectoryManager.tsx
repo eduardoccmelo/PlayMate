@@ -9,6 +9,14 @@ type PlayerDirectoryManagerProps = {
   currentUser: CurrentUser | null;
   onAddPlayer: (player: Omit<Player, "id">) => boolean;
   onUpdatePlayer: (player: Player) => boolean;
+  /** Own skills are saved as an admin ballot, never as a direct override. */
+  canVoteOwnSkills?: boolean;
+  ownSkillVote?: { level?: number; mobility?: 1 | 2 | 3 };
+  onSaveOwnSkillVote?: (
+    playerId: number,
+    level: number,
+    mobility: Mobility,
+  ) => void;
   onDeletePlayer: (playerId: number) => void;
 };
 
@@ -26,6 +34,9 @@ export function PlayerDirectoryManager({
   currentUser,
   onAddPlayer,
   onUpdatePlayer,
+  canVoteOwnSkills = false,
+  ownSkillVote,
+  onSaveOwnSkillVote,
   onDeletePlayer,
 }: PlayerDirectoryManagerProps) {
   const [mode, setMode] = useState<"add" | "edit" | null>(null);
@@ -44,13 +55,34 @@ export function PlayerDirectoryManager({
   const savePlayer = (event: FormEvent) => {
     event.preventDefault();
     const name = draft.name.trim();
+    const isSavingOwnPlayer = Boolean(editingPlayer && ownsPlayer(editingPlayer));
     const saved = editingPlayer
-      ? onUpdatePlayer({ ...editingPlayer, ...draft, name })
+      ? onUpdatePlayer({
+          ...editingPlayer,
+          ...draft,
+          // Skill fields belong to the ballot below, not a direct profile edit.
+          ...(isSavingOwnPlayer && canVoteOwnSkills
+            ? {
+                level: editingPlayer.level,
+                mobility: editingPlayer.mobility,
+              }
+            : {}),
+          name,
+        })
       : onAddPlayer({ ...draft, name });
     if (!saved) {
       // The only rejection reason today is a duplicate name in the directory.
       setFormError("Esse nome já está na lista.");
       return;
+    }
+
+    if (
+      editingPlayer &&
+      isSavingOwnPlayer &&
+      canVoteOwnSkills &&
+      onSaveOwnSkillVote
+    ) {
+      onSaveOwnSkillVote(editingPlayer.id, draft.level, draft.mobility);
     }
 
     setMessage(
@@ -109,8 +141,18 @@ export function PlayerDirectoryManager({
                   setMessage("");
                   setDraft({
                     name: player.name,
-                    level: player.level,
-                    mobility: player.mobility,
+                    level:
+                      ownsPlayer(player) && ownSkillVote?.level !== undefined
+                        ? ownSkillVote.level
+                        : player.level,
+                    mobility:
+                      ownsPlayer(player) && ownSkillVote?.mobility !== undefined
+                        ? ownSkillVote.mobility === 1
+                          ? "lento"
+                          : ownSkillVote.mobility === 3
+                            ? "rapido"
+                            : "neutro"
+                        : player.mobility,
                     condition: player.condition,
                     position: player.position,
                   });
@@ -171,11 +213,14 @@ export function PlayerDirectoryManager({
                   setFormError("");
                 }}
               />
-              {!isEditingOwnPlayer && (
+              {(!isEditingOwnPlayer || canVoteOwnSkills) && (
                 <select
                   className="player-form-level"
                   value={draft.level}
-                  disabled={mode === "edit"}
+                  disabled={
+                    mode === "edit" &&
+                    !(isEditingOwnPlayer && canVoteOwnSkills)
+                  }
                   onChange={(event) =>
                     setDraft({ ...draft, level: Number(event.target.value) })
                   }
@@ -187,10 +232,13 @@ export function PlayerDirectoryManager({
                   ))}
                 </select>
               )}
-              {!isEditingOwnPlayer && <select
+              {(!isEditingOwnPlayer || canVoteOwnSkills) && <select
                 className="player-form-mobility"
                 value={draft.mobility}
-                disabled={mode === "edit"}
+                disabled={
+                  mode === "edit" &&
+                  !(isEditingOwnPlayer && canVoteOwnSkills)
+                }
                 onChange={(event) =>
                   setDraft({
                     ...draft,

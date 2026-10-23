@@ -139,7 +139,7 @@ function createTestGames(): GameSession[] {
       time: "18:30",
       endTime: "20:00",
       duration: 90,
-      location: "PlayUp Sports Club",
+      location: "PlayMate Sports Club",
       courtNumber: "A",
       courtCost: 150,
       currency: "EUR",
@@ -181,7 +181,7 @@ function createTestGames(): GameSession[] {
       time: "20:15",
       endTime: "21:30",
       duration: 75,
-      location: "PlayUp Sports Club",
+      location: "PlayMate Sports Club",
       courtNumber: "B",
       courtCost: 150,
       currency: "EUR",
@@ -202,7 +202,7 @@ function createTestGames(): GameSession[] {
       time: "18:00",
       endTime: "19:30",
       duration: 90,
-      location: "PlayUp Sports Club",
+      location: "PlayMate Sports Club",
       courtNumber: "A",
       courtCost: 150,
       currency: "EUR",
@@ -468,8 +468,8 @@ export const seedGroups = (): PlayerGroup[] => ([
 ] as PlayerGroup[]).map(applyUnvotedSkillDefaults);
 
 export function seedBrowserStorage() {
-  const existingGroups = getStoredValue<PlayerGroup[]>("playup.groups.v1", []);
-  const storedSeedVersion = getStoredValue<number>("playup.seed-version", 0);
+  const existingGroups = getStoredValue<PlayerGroup[]>("playmate.groups.v1", []);
+  const storedSeedVersion = getStoredValue<number>("playmate.seed-version", 0);
   const refreshedSeeds = seedGroups();
   const seedIds = new Set(refreshedSeeds.map((group) => group.id));
   const missingSeedGroup = refreshedSeeds.some(
@@ -480,17 +480,17 @@ export function seedBrowserStorage() {
     existingGroups.length &&
     (storedSeedVersion < SEED_VERSION || missingSeedGroup)
   ) {
-    saveStoredValue("playup.groups.v1", [
+    saveStoredValue("playmate.groups.v1", [
       ...refreshedSeeds,
       ...existingGroups.filter((group) => !seedIds.has(group.id)),
     ]);
-    saveStoredValue("playup.seed-version", SEED_VERSION);
+    saveStoredValue("playmate.seed-version", SEED_VERSION);
     return;
   }
 
   if (existingGroups.length) return;
 
-  saveStoredValue("playup.groups.v1", refreshedSeeds);
-  saveStoredValue("playup.active-group.v1", SEED_GROUP_ID);
-  saveStoredValue("playup.seed-version", SEED_VERSION);
+  saveStoredValue("playmate.groups.v1", refreshedSeeds);
+  saveStoredValue("playmate.active-group.v1", SEED_GROUP_ID);
+  saveStoredValue("playmate.seed-version", SEED_VERSION);
 }

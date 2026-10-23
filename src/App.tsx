@@ -1,5 +1,5 @@
-import { PlayUpApp } from "./components/PlayUpApp";
+import { PlayMateApp } from "./components/PlayMateApp";
 
 export default function App() {
-  return <PlayUpApp />;
+  return <PlayMateApp />;
 }

@@ -1,4 +1,4 @@
-import playUpIcon from "../assets/playup-icon.png";
+import playMateIcon from "../assets/playmate-icon.png";
 import type { Language } from "../i18n";
 
 function LogoutIcon() {
@@ -83,13 +83,13 @@ export function Header({
       <a
         className="logo"
         href="#"
-        aria-label="PlayUp"
+        aria-label="PlayMate"
         onClick={(event) => {
           event.preventDefault();
           (onHome ?? onBack)();
         }}
       >
-        <img src={playUpIcon} alt="" />
+        <img src={playMateIcon} alt="" />
       </a>
     </header>
   );
