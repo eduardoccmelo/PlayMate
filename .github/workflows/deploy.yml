@@ -40,12 +40,12 @@ jobs:
           git fetch --quiet origin
           git checkout --force --quiet $SHA
           umask 077
-cat > .env <<'ENV'
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-PLAYUP_ENVIRONMENT=production
-WEB_PORT=80
-ENV
-chmod 600 .env
+          cat > .env <<'ENV'
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          PLAYUP_ENVIRONMENT=production
+          WEB_PORT=80
+          ENV
+          chmod 600 .env
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
           docker image prune -f
           curl -fsS http://localhost/api/health
