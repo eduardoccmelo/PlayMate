@@ -55,6 +55,22 @@ async def test_a_wrong_access_code_is_rejected(client: AsyncClient) -> None:
     assert response.status_code == 401
 
 
+async def test_an_access_code_is_consumed_after_verification(client: AsyncClient) -> None:
+    email = "single-use@example.com"
+    started = await client.post("/v1/auth/start", json={"email": email})
+    code = started.json()["accessCode"]
+
+    accepted = await client.post(
+        "/v1/auth/verify", json={"email": email, "accessCode": code}
+    )
+    assert accepted.status_code == 200
+
+    replayed = await client.post(
+        "/v1/auth/verify", json={"email": email, "accessCode": code}
+    )
+    assert replayed.status_code == 401
+
+
 async def test_creating_a_group_makes_the_creator_an_admin(client: AsyncClient) -> None:
     """Rule 1."""
     token = await sign_in(client, "organizer@example.com", "Organizer")

@@ -10,6 +10,7 @@ import type { FormEvent, ReactNode, SetStateAction } from "react";
 import { useBrowserAppState } from "../hooks/useBrowserAppState";
 import { runtimeConfig } from "../config/runtime";
 import type { SavedProfile } from "../services/browserAppRepository";
+import { apiRepository, type ApiProfile, type ApiSession } from "../services/apiRepository";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
@@ -270,6 +271,15 @@ const createOwnedPlayer = (players: Player[], user: CurrentUser): Player => ({
   condition: "neutro",
   position: "neutro",
 });
+const currentUserFromApi = (profile: ApiProfile): CurrentUser => ({
+  id: profile.id,
+  displayName: profile.displayName,
+  email: profile.email,
+  emailVerified: true,
+  adminGroupIds: [],
+  devGodMode: false,
+  createdAt: new Date().toISOString(),
+});
 const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
   const existingPlayer =
     group.players.find((player) => player.ownerUserId === user.id) ??
@@ -441,6 +451,26 @@ export function PlayMateApp() {
   const [profileRequested, setProfileRequested] = useState(false);
   const [isGameInviteOpen, setIsGameInviteOpen] = useState(false);
   const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
+  useEffect(() => {
+    if (runtimeConfig.dataSource !== "api") return;
+    const session = apiRepository.readSession();
+    if (!session) {
+      setCurrentUser(null);
+      return;
+    }
+    let cancelled = false;
+    void apiRepository.currentUser(session.token)
+      .then((profile) => {
+        if (!cancelled) setCurrentUser(currentUserFromApi(profile));
+      })
+      .catch(() => {
+        apiRepository.clearSession();
+        if (!cancelled) setCurrentUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setCurrentUser]);
   useEffect(() => {
     if (
       !runtimeConfig.loadDemoSeed ||
@@ -1455,6 +1485,11 @@ export function PlayMateApp() {
     return null;
   };
   const logout = () => {
+    if (runtimeConfig.dataSource === "api") {
+      const session = apiRepository.readSession();
+      apiRepository.clearSession();
+      if (session) void apiRepository.signOut(session.token).catch(() => undefined);
+    }
     if (currentUser) {
       setSavedProfiles((profiles) => ({
         ...profiles,
@@ -1479,6 +1514,11 @@ export function PlayMateApp() {
         openProfile={profileRequested}
         onCloseProfile={() => setProfileRequested(false)}
         onSaveUser={saveProfile}
+        onApiSession={(session: ApiSession) => {
+          setCurrentUser(currentUserFromApi(session.user));
+          setGroups([]);
+        }}
+        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => undefined}
@@ -1746,6 +1786,11 @@ export function PlayMateApp() {
         user={currentUser}
         onOpenProfile={() => setProfileRequested(true)}
         onSaveUser={saveProfile}
+        onApiSession={(session: ApiSession) => {
+          setCurrentUser(currentUserFromApi(session.user));
+          setGroups([]);
+        }}
+        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => {

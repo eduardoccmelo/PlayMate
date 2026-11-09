@@ -115,7 +115,7 @@ create table email_verification_tokens (
 );
 ~~~
 
-Each verification code is single-use and expires after five minutes. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
+Each verification code is single-use and expires after five minutes. The API enforces this against `access_code_updated_at` and replaces the hash immediately after a successful verification; the browser timer is presentation only and must never be treated as the authority. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
 
 ### Groups and memberships
 

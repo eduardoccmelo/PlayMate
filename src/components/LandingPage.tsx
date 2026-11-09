@@ -2,6 +2,9 @@ import playMateLogo from "../assets/playmate-logo.png";
 import { useEffect, useState } from "react";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser } from "../types";
+import { runtimeConfig } from "../config/runtime";
+import { ApiError } from "../services/apiClient";
+import { apiRepository, type ApiSession } from "../services/apiRepository";
 
 type LandingPageProps = {
   language: Language;
@@ -12,6 +15,8 @@ type LandingPageProps = {
     profile: Pick<CurrentUser, "displayName" | "email">,
     mode: "sign-in" | "sign-up",
   ) => string | null;
+  onApiSession?: (session: ApiSession) => void;
+  onApiProfile?: (profile: ApiSession["user"]) => void;
   onOpenProfile?: () => void;
   profileOnly?: boolean;
   openProfile?: boolean;
@@ -58,12 +63,15 @@ export function LandingPage({
   onEnter,
   user,
   onSaveUser,
+  onApiSession,
+  onApiProfile,
   onOpenProfile,
   profileOnly = false,
   openProfile = false,
   onCloseProfile,
   onLogout,
 }: LandingPageProps) {
+  const usesApi = runtimeConfig.dataSource === "api";
   const labels = content[language];
   const [name, setName] = useState(user?.displayName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -100,7 +108,7 @@ export function LandingPage({
     setName(nextProfile?.displayName ?? user?.displayName ?? "");
     setEmail(nextProfile?.email ?? user?.email ?? "");
   };
-  const issueAccessCode = () => {
+  const issueDemoAccessCode = () => {
     const issuedAt = Date.now();
     setIssuedAccessCode(createVerificationCode());
     setAccessCodeExpiresAt(issuedAt + 5 * 60 * 1000);
@@ -115,7 +123,35 @@ export function LandingPage({
   const remainingCodeTime = `${Math.floor(remainingCodeSeconds / 60)}:${String(
     remainingCodeSeconds % 60,
   ).padStart(2, "0")}`;
-  const sendAccessCode = () => {
+  const apiErrorMessage = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) {
+      return language === "pt" ? "Código de acesso inválido." : "Invalid access code.";
+    }
+    return language === "pt"
+      ? "Não foi possível concluir a solicitação. Tente novamente."
+      : "We could not complete the request. Please try again.";
+  };
+  const requestAccessCode = async () => {
+    if (usesApi) {
+      try {
+        const response = await apiRepository.startAccessCode(
+          email.trim().toLowerCase(),
+          mode === "sign-up" ? name.trim() : undefined,
+        );
+        const issuedAt = Date.now();
+        setIssuedAccessCode(response.accessCode ?? "");
+        setAccessCodeExpiresAt(issuedAt + 5 * 60 * 1000);
+        setNow(issuedAt);
+        setStep("verify");
+      } catch (error) {
+        setProfileError(apiErrorMessage(error));
+      }
+      return;
+    }
+    issueDemoAccessCode();
+    setStep(isEmailUpdate ? "verify-current-email" : "verify");
+  };
+  const sendAccessCode = async () => {
     if ((mode === "sign-up" || user?.emailVerified) && !name.trim()) {
       setProfileError("Informe seu nome.");
       return;
@@ -125,6 +161,22 @@ export function LandingPage({
       return;
     }
     if (!profileChanged) {
+      if (usesApi) {
+        const session = apiRepository.readSession();
+        if (!session) {
+          setProfileError(language === "pt" ? "Sua sessão expirou. Entre novamente." : "Your session expired. Please sign in again.");
+          return;
+        }
+        try {
+          const profile = await apiRepository.updateCurrentUser(session.token, name.trim());
+          apiRepository.saveSession({ ...session, user: profile });
+          onApiProfile?.(profile);
+          closeProfile({ displayName: profile.displayName, email: profile.email });
+        } catch (error) {
+          setProfileError(apiErrorMessage(error));
+        }
+        return;
+      }
       const error = onSaveUser(
         { displayName: name.trim(), email: email.trim().toLowerCase() },
         mode,
@@ -137,13 +189,35 @@ export function LandingPage({
         });
       return;
     }
+    if (usesApi && isEmailUpdate) {
+      setProfileError(language === "pt" ? "A alteração de e-mail ainda não está disponível nesta versão." : "Changing your email is not available in this version yet.");
+      return;
+    }
     setProfileError("");
     setAccessCode("");
     setResendConfirmation(false);
-    issueAccessCode();
-    setStep(isEmailUpdate ? "verify-current-email" : "verify");
+    await requestAccessCode();
   };
-  const verifyAccessCode = () => {
+  const verifyAccessCode = async () => {
+    if (usesApi) {
+      if (!accessCode.trim()) {
+        setProfileError(language === "pt" ? "Informe o código de acesso." : "Enter the access code.");
+        return;
+      }
+      if (Date.now() > accessCodeExpiresAt) {
+        setProfileError(language === "pt" ? "O código de acesso expirou. Envie um novo código." : "The access code expired. Send a new code.");
+        return;
+      }
+      try {
+        const session = await apiRepository.verifyAccessCode(email.trim().toLowerCase(), accessCode.trim());
+        apiRepository.saveSession(session);
+        onApiSession?.(session);
+        closeProfile({ displayName: session.user.displayName, email: session.user.email });
+      } catch (error) {
+        setProfileError(apiErrorMessage(error));
+      }
+      return;
+    }
     if (!issuedAccessCode || Date.now() > accessCodeExpiresAt) {
       setProfileError("O código de acesso expirou. Envie um novo código.");
       return;
@@ -156,7 +230,7 @@ export function LandingPage({
       setAccessCode("");
       setProfileError("");
       setResendConfirmation(false);
-      issueAccessCode();
+      issueDemoAccessCode();
       setStep("verify-new-email");
       return;
     }
@@ -362,8 +436,8 @@ export function LandingPage({
                 autoFocus
                 autoComplete="one-time-code"
                 inputMode="numeric"
-                maxLength={6}
-                placeholder="••••••"
+                maxLength={usesApi ? 8 : 6}
+                placeholder={usesApi ? "••••••••" : "••••••"}
                 type="password"
                 value={accessCode}
                 onChange={(event) => {
@@ -372,11 +446,11 @@ export function LandingPage({
                 }}
               />
             </label>
-            <small className="profile-demo-code">
+            {!usesApi && <small className="profile-demo-code">
               {language === "pt"
                 ? `Demonstração sem backend: use ${issuedAccessCode}. Expira em ${remainingCodeTime}.`
                 : `Backend-free demo: use ${issuedAccessCode}. Expires in ${remainingCodeTime}.`}
-            </small>
+            </small>}
             {resendConfirmation && (
               <small className="success profile-resend-confirmation">
                 {language === "pt"
@@ -399,8 +473,8 @@ export function LandingPage({
                 onClick={() => {
                   setAccessCode("");
                   setProfileError("");
-                  issueAccessCode();
                   setResendConfirmation(true);
+                  void requestAccessCode();
                 }}
               >
                 {language === "pt"

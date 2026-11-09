@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     #: How long a session token stays valid after it is issued.
     session_ttl_days: int = 30
+    #: One-time sign-in codes must have a short, server-enforced lifetime.
+    access_code_ttl_minutes: int = 5
     #: Hours before kickoff that the sweep cancels a game short of min_players.
     default_auto_cancellation_hours: int = 4
 

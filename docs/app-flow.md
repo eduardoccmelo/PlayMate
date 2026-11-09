@@ -15,7 +15,7 @@ flowchart TD
   F --> A
 ```
 
-The local front end generates a new six-digit demo verification code for every request and expires it after five minutes. The backend replaces this with real email delivery, one-time token hashes, and sessions. Logout clears the local session; a future sign-in restores the account data from the backend.
+The local front end generates a new six-digit demo verification code for every request and expires it after five minutes. In API mode, the backend issues an eight-digit code and enforces its five-minute validity server-side; the browser countdown is only a convenience. The backend replaces local verification with real email delivery, one-time token hashes, and sessions. Logout clears the local session; a future sign-in restores the account data from the backend.
 
 ## Cut-over status and operational readiness
 
