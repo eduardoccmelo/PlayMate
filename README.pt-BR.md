@@ -4,7 +4,7 @@
 
 PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
 
-> O projeto está atualmente em modo MVP. Dados, permissões e recuperação de perfil são simulados no navegador. As telas de e-mail/código de acesso geram um código local de demonstração, de uso único e com validade de cinco minutos; ainda não há backend, envio real de e-mail, autenticação real nem sincronização entre dispositivos.
+> O projeto está em uma transição de MVP por etapas. O backend em PostgreSQL/FastAPI já está publicado e o endpoint `/api/health` verifica a conectividade com o banco, mas a interface liberada ainda guarda seus dados e o login de demonstração localmente no navegador. Envio real de e-mail, autenticação no servidor e sincronização entre dispositivos ainda não estão habilitados na interface.
 
 ## Índice
 
@@ -200,7 +200,8 @@ Todos os novos jogadores começam com os valores padrão: nível 3, velocidade n
 - [TypeScript](https://www.typescriptlang.org/)
 - [Vite](https://vite.dev/)
 - CSS nativo responsivo
-- `localStorage` do navegador para persistência local
+- `localStorage` do navegador para a persistência atual da interface
+- FastAPI + PostgreSQL para a API e infraestrutura de produção
 
 ## Como executar localmente
 
@@ -277,11 +278,11 @@ Os dados são salvos apenas no `localStorage` do navegador. Isso significa que:
 - os códigos são validados somente contra dados locais e seedados;
 - o fluxo de perfil/e-mail/código é uma simulação local: não há contas reais, envio de e-mail, recuperação de código, permissões aplicadas pelo servidor nem auditoria.
 
-O modelo planejado de backend, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
+A API de backend está publicada separadamente da interface que ainda é local. `GET /api/health` só retorna sucesso após executar uma consulta ao banco; é uma verificação de prontidão da infraestrutura, não a confirmação de que todos os fluxos do produto já usam a API. O modelo de dados, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Próximos passos sugeridos
 
-- Implementar o backend e banco descritos em [docs/backend-schema.md](docs/backend-schema.md).
+- Conectar a interface ao backend existente em fatias verticais, começando por identidade e modelos de leitura de grupos/jogos.
 - Recuperação de perfil por e-mail com regeneração do código de acesso.
 - Links seguros e compartilháveis para grupos e jogos.
 - Integração de pagamento e confirmação automática.

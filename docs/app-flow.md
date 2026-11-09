@@ -17,6 +17,14 @@ flowchart TD
 
 The local front end generates a new six-digit demo verification code for every request and expires it after five minutes. The backend replaces this with real email delivery, one-time token hashes, and sessions. Logout clears the local session; a future sign-in restores the account data from the backend.
 
+## Cut-over status and operational readiness
+
+The deployed backend exposes `GET /api/health`. It runs a database query and
+is healthy only when both FastAPI and PostgreSQL are reachable. This protects
+deployment readiness, but does not itself migrate a browser profile or make a
+local UI flow server-backed. Until the interface is connected by a matching
+vertical slice, its demo sign-in, seeded data, and working state remain local.
+
 ## Groups and game access
 
 ```mermaid

@@ -4,7 +4,7 @@
 
 PlayMate is a web application for organizing group sports games. One profile can manage some groups, participate in others, and keep a separate list of upcoming games.
 
-> This project is currently an MVP. Data, permissions, and profile recovery are simulated in browser storage. The email/access-code screens generate a local one-time demo code that expires after five minutes; there is no backend, real email delivery, authentication, or cross-device synchronization yet.
+> This project is currently in a staged MVP cut-over. A PostgreSQL/FastAPI backend is deployed and its `/api/health` endpoint verifies database connectivity, but the released interface still stores its working data and demo sign-in locally in the browser. Real email delivery, server-backed authentication, and cross-device synchronization are not enabled in the interface yet.
 
 ## Contents
 
@@ -200,7 +200,8 @@ New players always start with level 3, neutral speed, neutral condition, and neu
 - [TypeScript](https://www.typescriptlang.org/)
 - [Vite](https://vite.dev/)
 - Responsive native CSS
-- Browser `localStorage` for local persistence
+- Browser `localStorage` for the current interface persistence
+- FastAPI + PostgreSQL for the backend API and production infrastructure
 
 ## Run locally
 
@@ -277,7 +278,7 @@ Data is stored only in the browser's `localStorage`. Consequently:
 - codes are validated only against local and seeded data, not remotely;
 - the profile/email/access-code journey is a local mock: there are no real accounts, email delivery, passcode recovery, server-enforced permissions, or audit trail.
 
-The planned backend model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
+The backend API is deployed separately from the still-local interface. `GET /api/health` returns success only after executing a database query; it is an infrastructure readiness probe, not proof that every product flow is already API-backed. The target data model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Deployment
 
@@ -291,7 +292,7 @@ Step-by-step instructions for an AWS EC2 instance are in [docs/deploy-aws.md](do
 
 ## Suggested next steps
 
-- Implement the backend and database described in [docs/backend-schema.md](docs/backend-schema.md).
+- Connect the interface to the existing backend in vertical slices, beginning with identity and group/game read models.
 - Email-based profile recovery with an access-code regeneration flow.
 - Secure, shareable group and game links.
 - Payment integration and automatic payment confirmation.

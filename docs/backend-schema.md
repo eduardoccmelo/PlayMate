@@ -439,6 +439,7 @@ Every active group admin receives their own recipient row. Dismissing a message 
 ## Suggested HTTP API
 
 ~~~text
+GET    /health                 # API + database readiness probe
 POST   /v1/auth/start
 POST   /v1/auth/verify
 POST   /v1/me/access-code/regenerate
@@ -475,6 +476,11 @@ GET    /v1/me/notifications
 POST   /v1/me/notifications/:notificationId/dismiss
 POST   /v1/me/notifications/dismiss-all
 ~~~
+
+`GET /health` is an operational endpoint, outside the versioned product API.
+It executes a lightweight `SELECT 1` against PostgreSQL and returns
+`{"status":"ok","database":"ok"}` only when both the API and database are
+ready. Database failures return HTTP 503 without exposing connection details.
 
 Group join accepts a code and role. Admin mode also requires the current group passcode. `POST /v1/groups/:groupId/games` is available to any active group member and records `created_by_user_id` plus `created_by_role`. `PATCH`/roster/payment/team routes authorize a group admin for any group game, or the creator for their participant-created game. Game lookup returns public game information only and must not expose the group player directory or player skills to a guest or participant organizer.
 

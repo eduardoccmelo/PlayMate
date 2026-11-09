@@ -37,7 +37,10 @@ def auth(token: str) -> dict[str, str]:
 
 
 async def test_health(client: AsyncClient) -> None:
-    assert (await client.get("/health")).json() == {"status": "ok"}
+    assert (await client.get("/health")).json() == {
+        "status": "ok",
+        "database": "ok",
+    }
 
 
 async def test_an_unauthenticated_request_is_rejected(client: AsyncClient) -> None:

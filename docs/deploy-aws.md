@@ -31,12 +31,16 @@ nano .env
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps           # all three "healthy"
-curl -s http://localhost/api/health   # {"status":"ok"}
+curl -s http://localhost/api/health   # {"status":"ok","database":"ok"}
 ```
 
 The backend runs `alembic upgrade head` on every start, so the schema is
 created on the first boot and upgraded on later ones. The database lives in
 the `playup-db` named volume and survives `down`/`up`.
+
+The health check performs `SELECT 1` against PostgreSQL. A container or
+deployment is therefore unhealthy when its API process is alive but its
+database connection is not.
 
 **Do not load `db/seed.sql` in production.** It creates demo users and groups
 with placeholder credentials.
