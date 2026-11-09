@@ -241,6 +241,7 @@ npm run preview
 | `npm run build` | Verifica os tipos TypeScript e cria o build de produção em `dist/`. |
 | `npm run preview` | Servidor local para visualizar o build de produção. |
 | `npm run lint` | Executa a análise estática do código com ESLint. |
+| `npm test` | Executa a suíte Vitest das regras determinísticas do front e do cliente de API. |
 
 ## Estrutura do projeto
 

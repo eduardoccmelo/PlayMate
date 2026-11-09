@@ -241,6 +241,7 @@ npm run preview
 | `npm run build` | Type-checks the project and creates the production build in `dist/`. |
 | `npm run preview` | Serves the production build locally. |
 | `npm run lint` | Runs static analysis with ESLint. |
+| `npm test` | Runs the Vitest suite for deterministic front-end rules and API-client behavior. |
 
 ## Project structure
 
