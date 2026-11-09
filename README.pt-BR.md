@@ -278,7 +278,7 @@ Os dados são salvos apenas no `localStorage` do navegador. Isso significa que:
 - os códigos são validados somente contra dados locais e seedados;
 - o fluxo de perfil/e-mail/código é uma simulação local: não há contas reais, envio de e-mail, recuperação de código, permissões aplicadas pelo servidor nem auditoria.
 
-A API de backend está publicada separadamente da interface que ainda é local. `GET /api/health` só retorna sucesso após executar uma consulta ao banco; é uma verificação de prontidão da infraestrutura, não a confirmação de que todos os fluxos do produto já usam a API. O modelo de dados, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
+A API de backend está publicada separadamente da interface que ainda é local. `GET /api/health` só retorna sucesso após executar uma consulta ao banco; é uma verificação de prontidão da infraestrutura, não a confirmação de que todos os fluxos do produto já usam a API. O app do navegador agora concentra seu estado persistido em `browserAppRepository`, enquanto `apiRepository` contém os contratos tipados dos endpoints já disponíveis de health e identidade. `VITE_DATA_SOURCE=browser` continua sendo o único modo de aplicação suportado até a fatia correspondente de grupos/jogos estar pronta. O modelo de dados, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Próximos passos sugeridos
 

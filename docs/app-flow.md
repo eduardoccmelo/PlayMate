@@ -25,6 +25,13 @@ deployment readiness, but does not itself migrate a browser profile or make a
 local UI flow server-backed. Until the interface is connected by a matching
 vertical slice, its demo sign-in, seeded data, and working state remain local.
 
+The front end has a deliberate persistence seam: `browserAppRepository` owns
+the current local workspace, and `apiRepository` contains typed calls only for
+the server capabilities already implemented (health and identity). The API
+data source is not enabled for the app yet. Demo seed data loads automatically
+only in local development; a deployed demo must explicitly set
+`VITE_DEMO_SEED=true`.
+
 ## Groups and game access
 
 ```mermaid

@@ -6,8 +6,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent, ReactNode } from "react";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import type { FormEvent, ReactNode, SetStateAction } from "react";
+import { useBrowserAppState } from "../hooks/useBrowserAppState";
+import { runtimeConfig } from "../config/runtime";
+import type { SavedProfile } from "../services/browserAppRepository";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
@@ -138,12 +140,6 @@ const resetPageScroll = () => {
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
   document.scrollingElement?.scrollTo({ left: 0, top: 0, behavior: "auto" });
-};
-type SavedProfile = {
-  user: CurrentUser;
-  groups: PlayerGroup[];
-  /** Composite `groupId:gameId` keys; game ids alone are only unique within a group. */
-  guestGameIds: string[];
 };
 const gameKey = (groupId: string, gameId: number) => `${groupId}:${gameId}`;
 const alphabeticallyByName =
@@ -331,9 +327,57 @@ const GuestTag = ({ player, language }: { player: Player; language: "pt" | "en" 
   ) : null;
 
 export function PlayMateApp() {
-  const [languagePreference, setLanguage] = useLocalStorage<"pt" | "en" | null>(
-    "playmate.language.preference",
-    null,
+  const [browserState, setBrowserState] = useBrowserAppState();
+  const { languagePreference, groups, currentUser, savedProfiles, activeGroupId } =
+    browserState;
+  const setLanguage = useCallback(
+    (nextLanguage: "pt" | "en" | null) =>
+      setBrowserState((state) => ({ ...state, languagePreference: nextLanguage })),
+    [setBrowserState],
+  );
+  const setGroups = useCallback(
+    (nextGroups: SetStateAction<PlayerGroup[]>) =>
+      setBrowserState((state) => ({
+        ...state,
+        groups:
+          typeof nextGroups === "function"
+            ? nextGroups(state.groups)
+            : nextGroups,
+      })),
+    [setBrowserState],
+  );
+  const setCurrentUser = useCallback(
+    (nextUser: SetStateAction<CurrentUser | null>) =>
+      setBrowserState((state) => ({
+        ...state,
+        currentUser:
+          typeof nextUser === "function"
+            ? nextUser(state.currentUser)
+            : nextUser,
+      })),
+    [setBrowserState],
+  );
+  const setSavedProfiles = useCallback(
+    (nextProfiles: SetStateAction<Record<string, SavedProfile>>) =>
+      setBrowserState((state) => ({
+        ...state,
+        savedProfiles:
+          typeof nextProfiles === "function"
+            ? nextProfiles(state.savedProfiles)
+            : nextProfiles,
+      })),
+    [setBrowserState],
+  );
+  const setActiveGroupId = useCallback(
+    (nextGroupId: SetStateAction<string | null>) =>
+      setBrowserState((state) => ({
+        ...state,
+        activeGroupId:
+          typeof nextGroupId === "function"
+            ? nextGroupId(state.activeGroupId)
+            : nextGroupId,
+      })),
+    [setBrowserState],
   );
   const language = languagePreference ?? browserLanguage();
   const [access, setAccess] = useState<
@@ -346,21 +390,6 @@ export function PlayMateApp() {
     | "admin-panel"
     | "past-games"
   >("home");
-  const [groups, setGroups] = useLocalStorage<PlayerGroup[]>(
-    "playmate.groups.v1",
-    [],
-  );
-  const [currentUser, setCurrentUser] = useLocalStorage<CurrentUser | null>(
-    "playmate.current-user.v1",
-    null,
-  );
-  const [savedProfiles, setSavedProfiles] = useLocalStorage<
-    Record<string, SavedProfile>
-  >("playmate.saved-profiles.v1", {});
-  const [activeGroupId, setActiveGroupId] = useLocalStorage<string | null>(
-    "playmate.active-group.v1",
-    null,
-  );
   const adminGroupIds = currentUser?.adminGroupIds ?? [];
   const activeGroup =
     groups.find((group) => group.id === activeGroupId) ?? null;
@@ -414,6 +443,7 @@ export function PlayMateApp() {
   const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
   useEffect(() => {
     if (
+      !runtimeConfig.loadDemoSeed ||
       !currentUser ||
       (!currentUser.devGodMode && currentUser.demoSeedVersion === SEED_VERSION)
     )
@@ -1432,7 +1462,7 @@ export function PlayMateApp() {
       }));
     }
     setCurrentUser(null);
-    setGroups(seedGroups());
+    setGroups(runtimeConfig.loadDemoSeed ? seedGroups() : []);
     setGuestGameIds([]);
     setActiveGroupId(null);
     setGameId(null);

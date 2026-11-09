@@ -278,7 +278,7 @@ Data is stored only in the browser's `localStorage`. Consequently:
 - codes are validated only against local and seeded data, not remotely;
 - the profile/email/access-code journey is a local mock: there are no real accounts, email delivery, passcode recovery, server-enforced permissions, or audit trail.
 
-The backend API is deployed separately from the still-local interface. `GET /api/health` returns success only after executing a database query; it is an infrastructure readiness probe, not proof that every product flow is already API-backed. The target data model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
+The backend API is deployed separately from the still-local interface. `GET /api/health` returns success only after executing a database query; it is an infrastructure readiness probe, not proof that every product flow is already API-backed. The browser app now owns its persisted state through `browserAppRepository`, while `apiRepository` contains the typed contracts for the already available health and identity endpoints. `VITE_DATA_SOURCE=browser` remains the only supported application mode until the corresponding group/game API slice is complete. The target data model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Deployment
 
