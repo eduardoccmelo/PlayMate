@@ -194,12 +194,20 @@ async def join_game(
     profile = await session.get(PlayerProfile, player_id)
     if profile is None:
         raise NotFound("Player profile not found")
+    if profile.group_id != context.game.group_id:
+        # A player profile is scoped to a group. In particular, an admin must
+        # not be able to use a UUID learned in Group A to add that person to a
+        # game in Group B.
+        raise PermissionDenied("That player does not belong to this game's group")
 
     await participants_domain.join_game(
         session,
         game_id=context.game.id,
         player_id=player_id,
-        user_id=viewer.user.id,
+        # Ownership belongs to the player being added, never to the admin
+        # performing the list-management action. Manual guest profiles have
+        # no owner and therefore no self-service payment/leave access.
+        user_id=profile.owner_user_id,
         display_name=body.display_name or profile.display_name,
     )
     confirmed, waiting = await _lists(session, context.game.id)

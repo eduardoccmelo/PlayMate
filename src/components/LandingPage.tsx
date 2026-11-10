@@ -435,7 +435,9 @@ export function LandingPage({
               <input
                 autoFocus
                 autoComplete="one-time-code"
-                inputMode="numeric"
+                inputMode={usesApi ? "text" : "numeric"}
+                autoCapitalize={usesApi ? "characters" : "none"}
+                spellCheck={false}
                 maxLength={usesApi ? 8 : 6}
                 placeholder={usesApi ? "••••••••" : "••••••"}
                 type="password"

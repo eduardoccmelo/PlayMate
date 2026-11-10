@@ -11,6 +11,7 @@ import { useBrowserAppState } from "../hooks/useBrowserAppState";
 import { runtimeConfig } from "../config/runtime";
 import type { SavedProfile } from "../services/browserAppRepository";
 import { apiRepository, type ApiProfile, type ApiSession } from "../services/apiRepository";
+import { ApiError } from "../services/apiClient";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
@@ -463,9 +464,13 @@ export function PlayMateApp() {
       .then((profile) => {
         if (!cancelled) setCurrentUser(currentUserFromApi(profile));
       })
-      .catch(() => {
-        apiRepository.clearSession();
-        if (!cancelled) setCurrentUser(null);
+      .catch((error: unknown) => {
+        // A timeout or a temporary 5xx must not log a valid user out. Only
+        // the API can tell us that the stored session is no longer valid.
+        if (error instanceof ApiError && [401, 403].includes(error.status)) {
+          apiRepository.clearSession();
+          if (!cancelled) setCurrentUser(null);
+        }
       });
     return () => {
       cancelled = true;
@@ -474,6 +479,7 @@ export function PlayMateApp() {
   useEffect(() => {
     if (
       !runtimeConfig.loadDemoSeed ||
+      runtimeConfig.dataSource === "api" ||
       !currentUser ||
       (!currentUser.devGodMode && currentUser.demoSeedVersion === SEED_VERSION)
     )
@@ -800,6 +806,8 @@ export function PlayMateApp() {
         .map((playerId) => allPlayers.find((player) => player.id === playerId))
         .filter((player): player is Player => Boolean(player));
       const shouldBalanceAutomatically =
+        !gameSession.cancelled &&
+        !hasGameEnded(gameSession) &&
         isGameReadyForBalancing(gameSession) &&
         listedPlayers.length === gameSession.playerIds.length;
       const balanceCount = balanceCountOf(gameSession);

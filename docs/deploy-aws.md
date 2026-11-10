@@ -42,6 +42,12 @@ The health check performs `SELECT 1` against PostgreSQL. A container or
 deployment is therefore unhealthy when its API process is alive but its
 database connection is not.
 
+The frontend is built by Vite, so its `VITE_*` variables are build-time
+inputs. GitHub repository variables `VITE_DATA_SOURCE` and `VITE_DEMO_SEED`
+are written into the deployment `.env` and forwarded as Docker build args.
+Keep them as `browser` and `false` respectively until SMTP and the matching
+groups/games API slices are production-ready.
+
 **Do not load `db/seed.sql` in production.** It creates demo users and groups
 with placeholder credentials.
 

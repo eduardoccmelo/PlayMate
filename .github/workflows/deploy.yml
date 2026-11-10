@@ -14,6 +14,8 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
   APP_DIR: /opt/playup
+  VITE_DATA_SOURCE: ${{ vars.VITE_DATA_SOURCE || 'browser' }}
+  VITE_DEMO_SEED: ${{ vars.VITE_DEMO_SEED || 'false' }}
 
 jobs:
   deploy:
@@ -44,6 +46,8 @@ jobs:
           POSTGRES_PASSWORD=$POSTGRES_PASSWORD
           PLAYUP_ENVIRONMENT=production
           WEB_PORT=80
+          VITE_DATA_SOURCE=$VITE_DATA_SOURCE
+          VITE_DEMO_SEED=$VITE_DEMO_SEED
           ENV
           chmod 600 .env
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait

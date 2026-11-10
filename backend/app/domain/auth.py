@@ -50,7 +50,9 @@ async def start_sign_in(
     to the mailer. It is never stored.
     """
     user = (
-        await session.execute(select(User).where(User.email == email))
+        await session.execute(
+            select(User).where(User.email == email).with_for_update()
+        )
     ).scalar_one_or_none()
 
     access_code = generate_code(ACCESS_CODE_LENGTH)
@@ -73,7 +75,9 @@ async def verify_access_code(
     session: AsyncSession, *, email: str, access_code: str, device_label: str | None = None
 ) -> IssuedSession:
     user = (
-        await session.execute(select(User).where(User.email == email))
+        await session.execute(
+            select(User).where(User.email == email).with_for_update()
+        )
     ).scalar_one_or_none()
     is_expired = (
         user is not None
