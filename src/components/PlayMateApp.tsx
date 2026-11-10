@@ -2413,6 +2413,23 @@ export function PlayMateApp() {
                   /{game.maxPlayers} ({paid.length}{" "}
                   {localize("pagos", language)})
                 </h2>
+                {game.playerIds.length > 0 &&
+                  paid.length < game.playerIds.length && (
+                    <button
+                      className="session-action-button view mark-all-paid-button"
+                      onClick={() => {
+                        const paidIds = [...game.playerIds];
+                        updateGame({
+                          ...game,
+                          paidPlayerIds: paidIds,
+                          playerIds: paidPlayersFirst(game.playerIds, paidIds),
+                        });
+                      }}
+                      type="button"
+                    >
+                      {localize("Marcar todos como pagos", language)}
+                    </button>
+                  )}
               </div>
               <div className="admin-player-search">
                 <div className="admin-player-search-controls">

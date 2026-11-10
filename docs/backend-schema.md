@@ -308,7 +308,7 @@ create unique index game_participants_active_name_unique_idx
   where status in ('confirmed', 'waiting_list');
 ~~~
 
-Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. A player leaves only their own entry and does so immediately; an admin may remove another player only from game management.
+Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. A player leaves only their own entry and does so immediately; an admin may remove another player only from game management. An authorized game manager may mark all confirmed main-list participants as paid in one transaction; waiting-list rows must remain unchanged and the operation must emit the same payment notifications as individual updates.
 
 ### Participation statistics
 
@@ -470,6 +470,7 @@ POST   /v1/games/:gameId/invites
 POST   /v1/games/join-by-code
 POST   /v1/games/:gameId/participants
 PATCH  /v1/games/:gameId/participants/:participantId/payment
+POST   /v1/games/:gameId/participants/mark-all-paid
 POST   /v1/games/:gameId/participants/:participantId/leave
 DELETE /v1/games/:gameId/participants/:participantId
 POST   /v1/games/:gameId/team-balance

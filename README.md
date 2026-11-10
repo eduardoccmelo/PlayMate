@@ -94,6 +94,7 @@ Games are displayed in chronological order. A completed game always uses the sam
 - When a main-list player is removed, the first waiting player is promoted automatically as pending.
 - The cost per player is calculated only from the main list; waiting-list players do not change the split.
 - Marking a player as paid also confirms them for the game.
+- The authorized game manager can mark every confirmed main-list player as paid at once; waiting-list players are never included.
 - Paid players are grouped at the top of the list while preserving their relative payment order.
 - Manual team generation is available with at least two paid main-list players. A full, fully paid main list generates teams automatically.
 - A waiting-list player can be included manually in the main list. They take the last pending spot, while the replaced player moves to the waiting list.

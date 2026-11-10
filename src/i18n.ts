@@ -189,6 +189,7 @@ export const translations: Record<
       "The player will take the last pending spot.",
     Pendente: "Pending",
     Pago: "Paid",
+    "Marcar todos como pagos": "Mark all as paid",
     PAGAMENTO: "PAYMENT",
     "LISTA DE ESPERA": "WAITING LIST",
     "lista de espera": "waiting list",

@@ -1739,6 +1739,19 @@ header {
 .player-list {
   counter-reset: admin-player;
 }
+.roster .panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.roster .panel-heading h2 {
+  margin: 0;
+}
+.mark-all-paid-button {
+  min-width: 0;
+  white-space: nowrap;
+}
 .player-row,
 .readonly-row,
 .wait-row,
@@ -2583,6 +2596,10 @@ header {
     align-items: flex-start;
     flex-direction: column;
     text-align: left;
+  }
+  .roster .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .directory-manager-title,
   .directory-add-button {
