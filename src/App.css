@@ -1739,6 +1739,23 @@ header {
 .player-list {
   counter-reset: admin-player;
 }
+.player-list-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 0 4px 29px;
+  color: #708073;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+}
+.player-list-header > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.player-list-header .payment-checkbox {
+  color: #486052;
+}
 .player-row,
 .readonly-row,
 .wait-row,

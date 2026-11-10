@@ -2484,6 +2484,31 @@ export function PlayMateApp() {
                   </p>
                 )}
               </div>
+              {game.playerIds.length > 0 && (
+                <div className="player-list-header">
+                  <span>{localize("Nome", language)}</span>
+                  <label className="payment-checkbox">
+                    <input
+                      aria-label={localize("Marcar todos como pagos", language)}
+                      checked={game.playerIds.every((playerId) =>
+                        game.paidPlayerIds.includes(playerId),
+                      )}
+                      onChange={(event) => {
+                        const paidIds = event.target.checked
+                          ? [...game.playerIds]
+                          : [];
+                        updateGame({
+                          ...game,
+                          paidPlayerIds: paidIds,
+                          playerIds: paidPlayersFirst(game.playerIds, paidIds),
+                        });
+                      }}
+                      type="checkbox"
+                    />
+                    <span>{localize("Todos pagos", language)}</span>
+                  </label>
+                </div>
+              )}
               <section className="player-list">
                 {listed.map((p) => {
                   const score = playerScoreBreakdown(p);

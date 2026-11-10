@@ -94,6 +94,7 @@ Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo l
 - Ao remover alguém da lista principal, a primeira pessoa da espera é promovida automaticamente como pendente.
 - O valor por pessoa é calculado usando somente os jogadores da lista principal; a lista de espera não altera a divisão do custo.
 - Marcar um jogador como pago também o confirma para o jogo.
+- O organizador autorizado pode usar o checkbox **Todos pagos** para atualizar de uma vez todos os jogadores confirmados da lista principal; jogadores da espera não são alterados.
 - Jogadores pagos ficam agrupados no topo da lista, preservando a ordem entre os já pagos.
 - A geração manual de times fica disponível com pelo menos dois jogadores pagos da lista principal. Com lista completa e todos pagos, os times são gerados automaticamente.
 - Um jogador da lista de espera pode ser incluído manualmente na lista principal. Ele ocupa a última vaga pendente, e o jogador substituído passa para a lista de espera.
