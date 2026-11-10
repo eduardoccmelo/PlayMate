@@ -1743,7 +1743,7 @@ header {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 8px 0 4px 29px;
+  padding: 8px 15px 8px 29px;
   color: #708073;
   font-size: 12px;
   font-weight: 800;
