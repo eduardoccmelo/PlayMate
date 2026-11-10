@@ -88,6 +88,10 @@ export const translations: Record<
       "Your level and speed are defined by the other admins.",
     "Cada admin vota nos outros jogadores. Cada voto atualiza a média imediatamente.":
       "Each admin votes for the other players. Each vote updates the average immediately.",
+    "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.":
+      "Each admin votes for every player, including themselves. Each vote updates the average immediately.",
+    "Seu voto será combinado com os votos dos outros admins.":
+      "Your vote will be combined with the other admins' votes.",
     "Média atual": "Current average",
     Votos: "Votes",
     "Convidar admins": "Invite admins",

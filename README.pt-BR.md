@@ -54,7 +54,7 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - O criador não pode ser removido. Se sair, a hierarquia passa para o membro restante com mais participações confirmadas; em empate, para a associação mais antiga. Sem sucessor elegível, o criador não pode sair.
 - Criar ou entrar em um grupo cria ou vincula imediatamente o jogador do próprio membro naquele grupo. Portanto, quem cria o grupo já começa com o papel de criador e um perfil jogável.
 - Os admins registram votos independentes para nível `1–5` e velocidade `1–3`. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
-- Todo admin vota nos outros jogadores do grupo. O próprio jogador não pode votar, visualizar ou alterar seu nível/velocidade; esses valores são definidos apenas pela média dos votos dos outros admins, com arredondamento de `.5` para cima. Posição e condição continuam editáveis pelo próprio jogador.
+- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê nem altera seu nível/velocidade no modal de editar jogador; esse voto só pode ser registrado ou alterado no Painel do admin. Posição e condição continuam editáveis pelo próprio jogador.
 
 ### Participantes, organizadores de jogos e guests
 

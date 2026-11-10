@@ -54,7 +54,7 @@ PlayMate is a web application for organizing group sports games. One profile can
 - The owner cannot be removed. If the owner leaves, ownership is transferred to the remaining member with the most confirmed participations; ties go to the oldest membership. An owner cannot leave without an eligible successor.
 - Creating or joining a group immediately creates or links the member's own player profile in that group. A group creator therefore starts with both the owner role and a playable profile.
 - Admins submit independent ratings for level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
-- Every admin votes on the other group players. A player's own ballot is never accepted or included in their rating: level and speed are the immediately applied, half-up average of other admins' votes. A user does not see or edit their own level/speed; position and condition remain editable by the player.
+- Every admin votes on every group player, including themselves. Each ballot has the same weight in the immediately applied, half-up average. A user does not see or edit their own level/speed in the player-edit modal; they can register or change their own vote only in the Admin panel. Position and condition remain editable by the player.
 
 ### Participants, game organizers, and guests
 

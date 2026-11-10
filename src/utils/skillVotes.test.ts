@@ -3,8 +3,7 @@ import type { PlayerGroup } from "../types";
 import {
   averageLevel,
   averageMobility,
-  externalSkillVotesFor,
-  removeSelfSkillVotes,
+  skillVotesFor,
 } from "./skillVotes";
 
 const group = (): PlayerGroup => ({
@@ -29,18 +28,15 @@ const group = (): PlayerGroup => ({
 });
 
 describe("skill voting", () => {
-  it("excludes a player's own admin ballot from their rating", () => {
-    const votes = externalSkillVotesFor(group(), 1);
-    expect(votes).toHaveLength(1);
-    expect(averageLevel(votes)).toBe(2);
-    expect(averageMobility(votes)).toBe("lento");
+  it("includes each admin ballot in the current player average", () => {
+    const votes = skillVotesFor(group(), 1);
+    expect(votes).toHaveLength(2);
+    expect(averageLevel(votes)).toBe(4);
+    expect(averageMobility(votes)).toBe("neutro");
   });
 
-  it("removes legacy self-ballots and restores neutral defaults without another vote", () => {
-    const seeded = group();
-    seeded.skillVotes = [seeded.skillVotes![0]];
-    const sanitized = removeSelfSkillVotes(seeded);
-    expect(sanitized.skillVotes).toEqual([]);
-    expect(sanitized.players[0]).toMatchObject({ level: 3, mobility: "neutro" });
+  it("uses neutral defaults when a player has no ballots", () => {
+    expect(averageLevel([])).toBe(3);
+    expect(averageMobility([])).toBe("neutro");
   });
 });

@@ -67,9 +67,7 @@ import {
 import {
   averageLevel,
   averageMobility,
-  externalSkillVotesFor,
-  isSelfSkillVote,
-  removeSelfSkillVotes,
+  skillVotesFor,
 } from "../utils/skillVotes";
 import {
   gameInviteCode,
@@ -502,9 +500,8 @@ export function PlayMateApp() {
           admins === groupWithPlayer.admins
             ? groupWithPlayer
             : { ...groupWithPlayer, admins };
-        const groupWithoutSelfVotes = removeSelfSkillVotes(nextGroup);
-        changed ||= groupWithoutSelfVotes !== group;
-        return groupWithoutSelfVotes;
+        changed ||= nextGroup !== group;
+        return nextGroup;
       });
       return changed ? nextGroups : currentGroups;
     });
@@ -1893,29 +1890,20 @@ export function PlayMateApp() {
             const actor = (group.admins ?? []).find(
               (admin) => admin.userId === currentUser.id,
             );
-            if (
-              !player ||
-              !actor ||
-              isSelfSkillVote(group, playerId, currentUser.id)
-            )
-              return group;
-            const groupWithoutSelfVotes = removeSelfSkillVotes(group);
-            const previous = (groupWithoutSelfVotes.skillVotes ?? []).find((vote) => vote.playerId === playerId && vote.adminUserId === currentUser.id);
+            if (!player || !actor) return group;
+            const previous = (group.skillVotes ?? []).find((vote) => vote.playerId === playerId && vote.adminUserId === currentUser.id);
             const nextVote = { playerId, adminUserId: currentUser.id, level: previous?.level, mobility: previous?.mobility, [field]: value ?? undefined, updatedAt: new Date().toISOString() };
             const skillVotes = [
-              ...(groupWithoutSelfVotes.skillVotes ?? []).filter((vote) => vote !== previous),
+              ...(group.skillVotes ?? []).filter((vote) => vote !== previous),
               ...((nextVote.level === undefined && nextVote.mobility === undefined) ? [] : [nextVote]),
             ];
-            const votes = externalSkillVotesFor(
-              { ...groupWithoutSelfVotes, skillVotes },
-              playerId,
-            );
-            const level = averageLevel(votes);
-            const mobility = averageMobility(votes);
+            const votes = skillVotesFor({ skillVotes }, playerId);
+            const level = averageLevel(votes, player.level);
+            const mobility = averageMobility(votes, player.mobility);
             return {
-              ...groupWithoutSelfVotes,
+              ...group,
               skillVotes,
-              players: groupWithoutSelfVotes.players.map((candidate) =>
+              players: group.players.map((candidate) =>
                 candidate.id !== playerId
                   ? candidate
                   : { ...candidate, level, mobility },
