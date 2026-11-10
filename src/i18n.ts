@@ -6,6 +6,7 @@ export const translations: Record<
   en: {
     Olá: "Hi",
     "SEU PERFIL": "YOUR PROFILE",
+    "Configurações do perfil": "Profile settings",
     "Como devemos chamar você?": "What should we call you?",
     "Seu nome": "Your name",
     você: "you",

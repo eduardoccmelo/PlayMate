@@ -37,6 +37,20 @@ button {
   cursor: pointer;
   font-size: 14px;
 }
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #e66c26;
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
 .access-page {
   max-width: 900px;
   margin: auto;
