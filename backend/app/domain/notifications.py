@@ -19,7 +19,7 @@ async def active_group_admin_ids(session: AsyncSession, group_id: UUID) -> list[
     result = await session.execute(
         select(GroupMembership.user_id).where(
             GroupMembership.group_id == group_id,
-            GroupMembership.role == GroupRole.ADMIN,
+            GroupMembership.role.in_((GroupRole.OWNER, GroupRole.ADMIN)),
             GroupMembership.left_at.is_(None),
         )
     )

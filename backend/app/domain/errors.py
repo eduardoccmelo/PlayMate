@@ -36,3 +36,8 @@ class Conflict(DomainError):
 class ValidationFailed(DomainError):
     status_code = 422
     code = "validation_failed"
+
+
+class ServiceUnavailable(DomainError):
+    status_code = 503
+    code = "service_unavailable"

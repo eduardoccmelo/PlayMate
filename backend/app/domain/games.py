@@ -146,7 +146,7 @@ async def viewer_access(
     open_game = game.status is GameStatus.ACTIVE
 
     if membership is not None:
-        is_admin = membership.role is GroupRole.ADMIN
+        is_admin = membership.role in (GroupRole.OWNER, GroupRole.ADMIN)
         return ViewerAccess(
             kind="admin" if is_admin else "member",
             status="active",

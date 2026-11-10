@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     session_ttl_days: int = 30
     #: One-time sign-in codes must have a short, server-enforced lifetime.
     access_code_ttl_minutes: int = 5
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_starttls: bool = True
     #: Hours before kickoff that the sweep cancels a game short of min_players.
     default_auto_cancellation_hours: int = 4
 
@@ -44,6 +50,17 @@ class Settings(BaseSettings):
         """Outside production the access code comes back in the response, so
         local development and tests do not need a working mailbox."""
         return not self.is_production
+
+    @property
+    def has_smtp(self) -> bool:
+        return all(
+            (
+                self.smtp_host,
+                self.smtp_username,
+                self.smtp_password,
+                self.smtp_from_email,
+            )
+        )
 
 
 @lru_cache

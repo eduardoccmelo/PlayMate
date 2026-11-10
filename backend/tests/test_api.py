@@ -71,7 +71,7 @@ async def test_an_access_code_is_consumed_after_verification(client: AsyncClient
     assert replayed.status_code == 401
 
 
-async def test_creating_a_group_makes_the_creator_an_admin(client: AsyncClient) -> None:
+async def test_creating_a_group_makes_the_creator_an_owner(client: AsyncClient) -> None:
     """Rule 1."""
     token = await sign_in(client, "organizer@example.com", "Organizer")
     created = await client.post(
@@ -83,7 +83,7 @@ async def test_creating_a_group_makes_the_creator_an_admin(client: AsyncClient) 
     assert created.json()["joinCode"]
 
     groups = await client.get("/v1/groups", headers=auth(token))
-    assert [group["role"] for group in groups.json()] == ["admin"]
+    assert [group["role"] for group in groups.json()] == ["owner"]
 
 
 async def test_a_participant_cannot_create_a_game(client: AsyncClient) -> None:
@@ -152,6 +152,39 @@ async def test_joining_as_admin_requires_the_passcode(client: AsyncClient) -> No
     )
     assert accepted.status_code == 200
     assert accepted.json()["role"] == "admin"
+
+
+async def test_only_the_owner_can_change_the_passcode_and_owner_leaves_transfer_role(
+    client: AsyncClient,
+) -> None:
+    owner_token = await sign_in(client, "owner@example.com", "Owner")
+    created = await client.post(
+        "/v1/groups",
+        json={"name": "City Night", "organizerPasscode": "hunter2"},
+        headers=auth(owner_token),
+    )
+    group_id = created.json()["group"]["id"]
+    join_code = created.json()["joinCode"]
+
+    member_token = await sign_in(client, "member@example.com", "Member")
+    joined = await client.post(
+        "/v1/groups/join",
+        json={"joinCode": join_code, "displayName": "Member"},
+        headers=auth(member_token),
+    )
+    assert joined.status_code == 200
+
+    refused = await client.post(
+        f"/v1/groups/{group_id}/passcode",
+        json={"currentPasscode": "hunter2", "newPasscode": "new-passcode"},
+        headers=auth(member_token),
+    )
+    assert refused.status_code == 403
+
+    left = await client.post(f"/v1/groups/{group_id}/leave", headers=auth(owner_token))
+    assert left.status_code == 204
+    memberships = await client.get("/v1/groups", headers=auth(member_token))
+    assert memberships.json()[0]["role"] == "owner"
 
 
 async def test_a_game_reports_the_viewers_calculated_permissions(

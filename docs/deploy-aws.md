@@ -48,6 +48,17 @@ are written into the deployment `.env` and forwarded as Docker build args.
 Keep them as `browser` and `false` respectively until SMTP and the matching
 groups/games API slices are production-ready.
 
+## 2.1 SMTP for production sign-in
+
+Set GitHub repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`. AWS SES SMTP credentials are supported
+directly. The sender identity must be verified in SES; keep the account in the
+SES sandbox only while all recipient addresses are also verified.
+
+The production API refuses `POST /api/v1/auth/start` with HTTP 503 when SMTP
+is absent, rather than claiming a code was sent. Development continues to
+return the code in the API response for local testing.
+
 **Do not load `db/seed.sql` in production.** It creates demo users and groups
 with placeholder credentials.
 

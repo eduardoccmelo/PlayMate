@@ -115,7 +115,7 @@ create table email_verification_tokens (
 );
 ~~~
 
-Each verification code is single-use and expires after five minutes. The API enforces this against `access_code_updated_at` and replaces the hash immediately after a successful verification; the browser timer is presentation only and must never be treated as the authority. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
+Each verification code is single-use and expires after five minutes. The API enforces this against `access_code_updated_at`, locks the user row during verification, and replaces the hash immediately after a successful verification; the browser timer is presentation only and must never be treated as the authority. Production delivers codes through configured SMTP and returns HTTP 503 when delivery is not configured; development may return a code only to support local testing. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
 
 ### Groups and memberships
 
@@ -152,6 +152,8 @@ create index group_memberships_user_active_idx
 ~~~
 
 Every group has exactly one active `owner`; additional administrators use role `admin`. The owner is the creator-level role: only that user may delete the group or change its passcode. An admin may rename the group but cannot remove/demote the owner. When an owner leaves, transfer the sole owner role transactionally to the most active remaining member (confirmed participations), then the oldest active membership on a tie. Reject the leave when no successor exists.
+
+The initial database migration is upgraded by `0002_group_owner`: it promotes the recorded creator of every existing group to `owner` and adds the partial unique index that enforces one active owner. A shared join code may create only `admin` or `participant` membership; it can never grant ownership.
 
 Use Argon2id (preferred) or bcrypt for group codes and organizer passcodes. A short, non-sensitive prefix narrows candidates before comparing hashes.
 
