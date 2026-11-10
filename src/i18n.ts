@@ -84,14 +84,10 @@ export const translations: Record<
     votos: "votes",
     "Sem votos ainda": "No votes yet",
     "Votação de atributos": "Attribute voting",
-    "Cada voto atualiza a média imediatamente. Você não pode ver nem votar seu próprio nível ou velocidade.":
-      "Each vote updates the average immediately. You cannot see or vote on your own level or speed.",
-    "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.":
-      "Each admin votes for every player, including themselves. Each vote updates the average immediately.",
-    "Seu voto será combinado com os votos dos outros admins.":
-      "Your vote will be combined with the other admins' votes.",
     "Seu nível e velocidade são definidos pelos outros admins.":
       "Your level and speed are defined by the other admins.",
+    "Cada admin vota nos outros jogadores. Cada voto atualiza a média imediatamente.":
+      "Each admin votes for the other players. Each vote updates the average immediately.",
     "Média atual": "Current average",
     Votos: "Votes",
     "Convidar admins": "Invite admins",
@@ -415,8 +411,8 @@ export const translations: Record<
       "Team balancing will be available only when the list is full and every player has paid.",
     "Marque pelo menos 2 jogadores como pagos para gerar os times.":
       "Mark at least 2 players as paid to generate teams.",
-    "O limite de 1 rebalanceamento foi atingido. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.":
-      "The limit of 1 rebalance has been reached. The button will be re-enabled 15 minutes before the game and remain available until it ends for one final rebalance only.",
+    "Os balanceamentos regulares foram utilizados. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.":
+      "The regular balances have been used. The button will be re-enabled 15 minutes before the game and remain available until it ends for one final rebalance only.",
     "Somente mais 1 rebalanceamento final disponível.":
       "Only 1 final rebalance remains available.",
     "O rebalanceamento final já foi utilizado.":

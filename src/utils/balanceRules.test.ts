@@ -46,8 +46,8 @@ const game = (overrides: Partial<GameSession> = {}): GameSession => ({
 
 describe("balance rules", () => {
   it("keeps distinct standard quotas for admin and participant organizers", () => {
-    expect(standardBalanceLimit(game())).toBe(2);
-    expect(standardBalanceLimit(game({ createdByRole: "participant" }))).toBe(1);
+    expect(standardBalanceLimit(game())).toBe(3);
+    expect(standardBalanceLimit(game({ createdByRole: "participant" }))).toBe(2);
   });
 
   it("opens the final balance window exactly fifteen minutes before kickoff", () => {

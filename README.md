@@ -54,7 +54,7 @@ PlayMate is a web application for organizing group sports games. One profile can
 - The owner cannot be removed. If the owner leaves, ownership is transferred to the remaining member with the most confirmed participations; ties go to the oldest membership. An owner cannot leave without an eligible successor.
 - Creating or joining a group immediately creates or links the member's own player profile in that group. A group creator therefore starts with both the owner role and a playable profile.
 - Admins submit independent ratings for level `1–5` and speed `1–3`. The current mean is applied immediately, rounded half-up; missing votes never block balancing.
-- Every admin votes on every group player, including themselves. Each ballot has the same weight in the immediately applied, half-up average. A user does not see their own final level/speed in game-management lists, but can register or change their own vote in the Admin panel; position and condition remain editable by the player.
+- Every admin votes on the other group players. A player's own ballot is never accepted or included in their rating: level and speed are the immediately applied, half-up average of other admins' votes. A user does not see or edit their own level/speed; position and condition remain editable by the player.
 
 ### Participants, game organizers, and guests
 
@@ -152,8 +152,8 @@ The quota is intentionally small: balancing should be the final preparation step
 
 | Game organizer | Standard balances (automatic/manual combined) | Final window |
 | --- | ---: | --- |
-| Group admin | 2 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
-| Group participant | 1 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
+| Group admin | 3 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
+| Group participant | 2 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
 
 For admin-managed games, the latest balance notice identifies whether it was automatic or triggered by an admin, who triggered it when applicable, and the current count. For participant-organized games, no administrator identity or player attributes are exposed. Each new balance replaces the previous notice and snapshot. The algorithm chooses a different comparably fair player split whenever possible; simply swapping Team A and Team B does not count as a new split.
 

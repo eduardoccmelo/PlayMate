@@ -54,7 +54,7 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - O criador não pode ser removido. Se sair, a hierarquia passa para o membro restante com mais participações confirmadas; em empate, para a associação mais antiga. Sem sucessor elegível, o criador não pode sair.
 - Criar ou entrar em um grupo cria ou vincula imediatamente o jogador do próprio membro naquele grupo. Portanto, quem cria o grupo já começa com o papel de criador e um perfil jogável.
 - Os admins registram votos independentes para nível `1–5` e velocidade `1–3`. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
-- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê seu nível/velocidade finais nas listas de gerenciamento do jogo, mas pode registrar ou mudar o próprio voto no Painel do admin; posição e condição continuam editáveis pelo próprio jogador.
+- Todo admin vota nos outros jogadores do grupo. O próprio jogador não pode votar, visualizar ou alterar seu nível/velocidade; esses valores são definidos apenas pela média dos votos dos outros admins, com arredondamento de `.5` para cima. Posição e condição continuam editáveis pelo próprio jogador.
 
 ### Participantes, organizadores de jogos e guests
 
@@ -152,8 +152,8 @@ O limite é propositalmente pequeno: o balanceamento deve ser a etapa final da p
 
 | Responsável pelo jogo | Balanceamentos regulares (automático/manual combinados) | Janela final |
 | --- | ---: | --- |
-| Admin do grupo | 2 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
-| Participante do grupo | 1 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
+| Admin do grupo | 3 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
+| Participante do grupo | 2 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
 
 Nos jogos gerenciados por admin, o último aviso informa se o balanceamento foi automático ou disparado por admin, identifica o responsável quando aplicável e mostra a contagem. Em jogos criados por participante, nenhum nome de admin nem atributo de jogador é exibido. Cada novo balanceamento substitui o aviso e o snapshot anterior. Sempre que houver alternativa justa, o algoritmo escolhe uma composição diferente; apenas inverter Time A e Time B não conta como nova divisão.
 

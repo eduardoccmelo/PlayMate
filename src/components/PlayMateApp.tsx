@@ -25,7 +25,6 @@ import type {
   Player,
   PlayerGroup,
   CurrentUser,
-  PlayerSkillVote,
 } from "../types";
 import { localize } from "../i18n";
 import { GameForm } from "./GameForm";
@@ -65,6 +64,13 @@ import {
   samePlayerSet,
   standardBalanceLimit,
 } from "../utils/balanceRules";
+import {
+  averageLevel,
+  averageMobility,
+  externalSkillVotesFor,
+  isSelfSkillVote,
+  removeSelfSkillVotes,
+} from "../utils/skillVotes";
 import {
   gameInviteCode,
   groupAdminInviteCode,
@@ -175,24 +181,6 @@ const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
     },
     player,
   };
-};
-const mobilityFromScore = (score: number): Mobility =>
-  score === 1 ? "lento" : score === 3 ? "rapido" : "neutro";
-const averageLevel = (votes: PlayerSkillVote[], fallback: number) => {
-  const values = votes.flatMap((vote) => (vote.level === undefined ? [] : [vote.level]));
-  return values.length
-    ? Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5)
-    : fallback;
-};
-const averageMobility = (votes: PlayerSkillVote[], fallback: Mobility) => {
-  const values = votes.flatMap((vote) =>
-    vote.mobility === undefined ? [] : [vote.mobility],
-  );
-  return values.length
-    ? mobilityFromScore(
-        Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5),
-      )
-    : fallback;
 };
 const TrashIcon = () => (
   <svg aria-hidden="true" className="trash-icon" viewBox="0 0 24 24">
@@ -514,8 +502,9 @@ export function PlayMateApp() {
           admins === groupWithPlayer.admins
             ? groupWithPlayer
             : { ...groupWithPlayer, admins };
-        changed ||= nextGroup !== group;
-        return nextGroup;
+        const groupWithoutSelfVotes = removeSelfSkillVotes(nextGroup);
+        changed ||= groupWithoutSelfVotes !== group;
+        return groupWithoutSelfVotes;
       });
       return changed ? nextGroups : currentGroups;
     });
@@ -1904,20 +1893,29 @@ export function PlayMateApp() {
             const actor = (group.admins ?? []).find(
               (admin) => admin.userId === currentUser.id,
             );
-            if (!player || !actor) return group;
-            const previous = (group.skillVotes ?? []).find((vote) => vote.playerId === playerId && vote.adminUserId === currentUser.id);
+            if (
+              !player ||
+              !actor ||
+              isSelfSkillVote(group, playerId, currentUser.id)
+            )
+              return group;
+            const groupWithoutSelfVotes = removeSelfSkillVotes(group);
+            const previous = (groupWithoutSelfVotes.skillVotes ?? []).find((vote) => vote.playerId === playerId && vote.adminUserId === currentUser.id);
             const nextVote = { playerId, adminUserId: currentUser.id, level: previous?.level, mobility: previous?.mobility, [field]: value ?? undefined, updatedAt: new Date().toISOString() };
             const skillVotes = [
-              ...(group.skillVotes ?? []).filter((vote) => vote !== previous),
+              ...(groupWithoutSelfVotes.skillVotes ?? []).filter((vote) => vote !== previous),
               ...((nextVote.level === undefined && nextVote.mobility === undefined) ? [] : [nextVote]),
             ];
-            const votes = skillVotes.filter((vote) => vote.playerId === playerId);
-            const level = averageLevel(votes, player.level);
-            const mobility = averageMobility(votes, player.mobility);
+            const votes = externalSkillVotesFor(
+              { ...groupWithoutSelfVotes, skillVotes },
+              playerId,
+            );
+            const level = averageLevel(votes);
+            const mobility = averageMobility(votes);
             return {
-              ...group,
+              ...groupWithoutSelfVotes,
               skillVotes,
-              players: group.players.map((candidate) =>
+              players: groupWithoutSelfVotes.players.map((candidate) =>
                 candidate.id !== playerId
                   ? candidate
                   : { ...candidate, level, mobility },
@@ -2289,77 +2287,6 @@ export function PlayMateApp() {
           language={language}
           players={players}
           currentUser={currentUser}
-          canVoteOwnSkills={Boolean(
-            currentUser &&
-              activeGroup?.admins?.some(
-                (admin) => admin.userId === currentUser.id,
-              ),
-          )}
-          ownSkillVote={(() => {
-            const ownPlayer = players.find((player) =>
-              isCurrentUserPlayer(player, currentUser),
-            );
-            return ownPlayer
-              ? (activeGroup?.skillVotes ?? []).find(
-                  (vote) =>
-                    vote.playerId === ownPlayer.id &&
-                    vote.adminUserId === currentUser?.id,
-                )
-              : undefined;
-          })()}
-          onSaveOwnSkillVote={(playerId, level, mobility) => {
-            if (!currentUser || !activeGroup) return;
-            const mobilityVote =
-              mobility === "lento" ? 1 : mobility === "rapido" ? 3 : 2;
-            setGroups((currentGroups) =>
-              currentGroups.map((group) => {
-                if (group.id !== activeGroup.id) return group;
-                const player = group.players.find(
-                  (candidate) => candidate.id === playerId,
-                );
-                const actor = (group.admins ?? []).find(
-                  (admin) => admin.userId === currentUser.id,
-                );
-                const isOwnPlayer =
-                  player?.ownerUserId === currentUser.id ||
-                  actor?.playerId === playerId;
-                if (!player || !actor || !isOwnPlayer) return group;
-                const previous = (group.skillVotes ?? []).find(
-                  (vote) =>
-                    vote.playerId === playerId &&
-                    vote.adminUserId === currentUser.id,
-                );
-                const skillVotes = [
-                  ...(group.skillVotes ?? []).filter(
-                    (vote) => vote !== previous,
-                  ),
-                  {
-                    playerId,
-                    adminUserId: currentUser.id,
-                    level,
-                    mobility: mobilityVote as 1 | 2 | 3,
-                    updatedAt: new Date().toISOString(),
-                  },
-                ];
-                const votes = skillVotes.filter(
-                  (vote) => vote.playerId === playerId,
-                );
-                return {
-                  ...group,
-                  skillVotes,
-                  players: group.players.map((candidate) =>
-                    candidate.id !== playerId
-                      ? candidate
-                      : {
-                          ...candidate,
-                          level: averageLevel(votes, candidate.level),
-                          mobility: averageMobility(votes, candidate.mobility),
-                        },
-                  ),
-                };
-              }),
-            );
-          }}
           onAddPlayer={(player) => {
             if (
               players.some(
@@ -2433,6 +2360,12 @@ export function PlayMateApp() {
               player.id === updatedPlayer.id
                 ? {
                     ...updatedPlayer,
+                    ...(isCurrentUserPlayer(player, currentUser)
+                      ? {
+                          level: player.level,
+                          mobility: player.mobility,
+                        }
+                      : {}),
                     ownerUserId:
                       player.ownerUserId ??
                       (currentUser &&
@@ -2861,7 +2794,7 @@ export function PlayMateApp() {
                   !game.lateRebalanceUsed && (
                     <p className="balance-availability balance-limit-notice">
                       {localize(
-                        "O limite de 1 rebalanceamento foi atingido. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.",
+                        "Os balanceamentos regulares foram utilizados. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.",
                         language,
                       )}
                     </p>

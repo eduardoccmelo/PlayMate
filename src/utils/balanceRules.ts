@@ -2,7 +2,8 @@ import type { BalanceHistoryEntry, GameSession, Player } from "../types";
 import { gameTimestamp } from "./game";
 import { playerScoreBreakdown } from "./teamBalancer";
 
-export const MAX_STANDARD_BALANCES = 2;
+export const MAX_STANDARD_BALANCES = 3;
+export const MAX_PARTICIPANT_STANDARD_BALANCES = 2;
 export const FINAL_REBALANCE_WINDOW = 15 * 60 * 1000;
 
 export const isGameReadyForBalancing = (game: GameSession) =>
@@ -10,7 +11,9 @@ export const isGameReadyForBalancing = (game: GameSession) =>
   game.playerIds.every((playerId) => game.paidPlayerIds.includes(playerId));
 
 export const standardBalanceLimit = (game: GameSession) =>
-  game.createdByRole === "participant" ? 1 : MAX_STANDARD_BALANCES;
+  game.createdByRole === "participant"
+    ? MAX_PARTICIPANT_STANDARD_BALANCES
+    : MAX_STANDARD_BALANCES;
 
 export const lockedBalanceWindow = (game: GameSession) => {
   const scheduledAt = gameTimestamp(game);
