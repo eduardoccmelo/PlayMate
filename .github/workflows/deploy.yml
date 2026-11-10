@@ -28,6 +28,9 @@ jobs:
       - name: Deploy via SSM
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          # Repository variable, e.g. "example.com, www.example.com".
+          # Empty until DNS points at the instance: plain HTTP on port 80.
+          SITE_ADDRESS: ${{ vars.SITE_ADDRESS || ':80' }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
           SHA: ${{ github.sha }}
         run: |
@@ -43,12 +46,15 @@ jobs:
           cat > .env <<'ENV'
           POSTGRES_PASSWORD=$POSTGRES_PASSWORD
           PLAYUP_ENVIRONMENT=production
-          WEB_PORT=80
+          SITE_ADDRESS=$SITE_ADDRESS
           ENV
           chmod 600 .env
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
           docker image prune -f
-          curl -fsS http://localhost/api/health
+          # Through nginx, inside the network: independent of whether Caddy
+          # is serving plain HTTP or redirecting to the domain over HTTPS.
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend wget -qO- http://127.0.0.1/api/health
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml ps caddy
           EOF
           )
 
