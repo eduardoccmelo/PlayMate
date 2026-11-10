@@ -2411,19 +2411,57 @@ export function PlayMateApp() {
               </div>
               <div className="admin-player-search">
                 <div className="admin-player-search-controls">
-                  <input
-                    value={adminPlayerSearch}
-                    placeholder={localize("Buscar jogadores", language)}
-                    autoComplete="off"
-                    onFocus={() => setIsAdminPlayerSearchOpen(true)}
-                    onBlur={() =>
-                      window.setTimeout(
-                        () => setIsAdminPlayerSearchOpen(false),
-                        150,
-                      )
-                    }
-                    onChange={(e) => setAdminPlayerSearch(e.target.value)}
-                  />
+                  <div className="admin-player-search-input">
+                    <input
+                      value={adminPlayerSearch}
+                      placeholder={localize("Buscar jogadores", language)}
+                      autoComplete="off"
+                      onFocus={() => setIsAdminPlayerSearchOpen(true)}
+                      onBlur={() =>
+                        window.setTimeout(
+                          () => setIsAdminPlayerSearchOpen(false),
+                          150,
+                        )
+                      }
+                      onChange={(e) => setAdminPlayerSearch(e.target.value)}
+                    />
+                    {playerSearchResults.length > 0 && (
+                      <div className="admin-player-search-results">
+                        {playerSearchResults.map((player) => {
+                          const isListed = game.playerIds.includes(player.id);
+                          const isWaiting = game.waitlistIds.includes(player.id);
+
+                          return (
+                            <div key={player.id}>
+                              <span>
+                                {player.name}
+                                <GuestTag player={player} language={language} />
+                                {isCurrentUserPlayer(player, currentUser) &&
+                                  ` (${localize("você", language)})`}
+                              </span>
+                              {isListed ? (
+                                <small>{localize("na lista", language)}</small>
+                              ) : isWaiting ? (
+                                <small>
+                                  {localize("na lista de espera", language)}
+                                </small>
+                              ) : (
+                                <button
+                                  className="text-button"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() =>
+                                    addPlayerToGame(game, player.id, updateGame)
+                                  }
+                                >
+                                  {localize("Adicionar", language)}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <button
                     className="primary"
                     onClick={() => {
@@ -2437,42 +2475,6 @@ export function PlayMateApp() {
                     {localize("+ Criar jogador", language)}
                   </button>
                 </div>
-                {playerSearchResults.length > 0 && (
-                  <div className="admin-player-search-results">
-                    {playerSearchResults.map((player) => {
-                      const isListed = game.playerIds.includes(player.id);
-                      const isWaiting = game.waitlistIds.includes(player.id);
-
-                      return (
-                        <div key={player.id}>
-                          <span>
-                            {player.name}
-                            <GuestTag player={player} language={language} />
-                            {isCurrentUserPlayer(player, currentUser) &&
-                              ` (${localize("você", language)})`}
-                          </span>
-                          {isListed ? (
-                            <small>{localize("na lista", language)}</small>
-                          ) : isWaiting ? (
-                            <small>
-                              {localize("na lista de espera", language)}
-                            </small>
-                          ) : (
-                            <button
-                              className="text-button"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() =>
-                                addPlayerToGame(game, player.id, updateGame)
-                              }
-                            >
-                              {localize("Adicionar", language)}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
                 {playerFormNotice && (
                   <p className="success directory-message">
                     ✓ {localize(playerFormNotice, language)}

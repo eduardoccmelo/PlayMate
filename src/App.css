@@ -1787,9 +1787,13 @@ header {
   display: flex;
   gap: 8px;
 }
-.admin-player-search-controls input {
+.admin-player-search-input {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+.admin-player-search-controls input {
+  width: 100%;
   min-height: var(--action-button-height);
   height: var(--action-button-height);
 }
@@ -3127,7 +3131,7 @@ header {
   .admin-player-search-controls {
     flex-wrap: wrap;
   }
-  .admin-player-search-controls input,
+  .admin-player-search-input,
   .admin-player-search-controls .primary {
     flex-basis: 100%;
     width: 100%;
