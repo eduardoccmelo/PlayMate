@@ -576,10 +576,9 @@ export function PlayMateApp() {
   const [playerForm, setPlayerForm] = useState(emptyPlayer);
   const [editPlayer, setEditPlayer] = useState<number | null>(null);
   const [isPlayerFormOpen, setIsPlayerFormOpen] = useState(false);
-  const [playerFormNotice, setPlayerFormNotice] = useState("");
   const [playerFormError, setPlayerFormError] = useState("");
   const [adminPlayerSearch, setAdminPlayerSearch] = useState("");
-  const [isAdminPlayerSearchOpen, setIsAdminPlayerSearchOpen] = useState(false);
+  const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
   const [, setPick] = useState("");
   const [, setEntered] = useState(false);
   const [notice, setNotice] = useState("");
@@ -644,7 +643,7 @@ export function PlayMateApp() {
         .filter((player): player is Player => Boolean(player))
     : [];
   const adminSearchTerm = adminPlayerSearch.trim().toLocaleLowerCase();
-  const playerSearchResults = isAdminPlayerSearchOpen
+  const playerSearchResults = isPlayerPickerOpen
     ? players
         .filter(
           (player) =>
@@ -1011,11 +1010,6 @@ export function PlayMateApp() {
     setEditPlayer(null);
     setPlayerFormError("");
     setIsPlayerFormOpen(false);
-    setPlayerFormNotice(
-      isNewPlayer
-        ? "Jogador adicionado com sucesso."
-        : "Jogador atualizado com sucesso.",
-    );
   };
   const removePlayerFromGame = (playerId: number) => {
     if (!game) return;
@@ -2410,76 +2404,16 @@ export function PlayMateApp() {
                 </h2>
               </div>
               <div className="admin-player-search">
-                <div className="admin-player-search-controls">
-                  <div className="admin-player-search-input">
-                    <input
-                      value={adminPlayerSearch}
-                      placeholder={localize("Buscar jogadores", language)}
-                      autoComplete="off"
-                      onFocus={() => setIsAdminPlayerSearchOpen(true)}
-                      onBlur={() =>
-                        window.setTimeout(
-                          () => setIsAdminPlayerSearchOpen(false),
-                          150,
-                        )
-                      }
-                      onChange={(e) => setAdminPlayerSearch(e.target.value)}
-                    />
-                    {playerSearchResults.length > 0 && (
-                      <div className="admin-player-search-results">
-                        {playerSearchResults.map((player) => {
-                          const isListed = game.playerIds.includes(player.id);
-                          const isWaiting = game.waitlistIds.includes(player.id);
-
-                          return (
-                            <div key={player.id}>
-                              <span>
-                                {player.name}
-                                <GuestTag player={player} language={language} />
-                                {isCurrentUserPlayer(player, currentUser) &&
-                                  ` (${localize("você", language)})`}
-                              </span>
-                              {isListed ? (
-                                <small>{localize("na lista", language)}</small>
-                              ) : isWaiting ? (
-                                <small>
-                                  {localize("na lista de espera", language)}
-                                </small>
-                              ) : (
-                                <button
-                                  className="text-button"
-                                  onMouseDown={(event) => event.preventDefault()}
-                                  onClick={() =>
-                                    addPlayerToGame(game, player.id, updateGame)
-                                  }
-                                >
-                                  {localize("Adicionar", language)}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    className="primary"
-                    onClick={() => {
-                      setEditPlayer(null);
-                      setPlayerForm(emptyPlayer);
-                      setPlayerFormNotice("");
-                      setPlayerFormError("");
-                      setIsPlayerFormOpen(true);
-                    }}
-                  >
-                    {localize("+ Criar jogador", language)}
-                  </button>
-                </div>
-                {playerFormNotice && (
-                  <p className="success directory-message">
-                    ✓ {localize(playerFormNotice, language)}
-                  </p>
-                )}
+                <button
+                  className="primary player-picker-button"
+                  onClick={() => {
+                    setAdminPlayerSearch("");
+                    setIsPlayerPickerOpen(true);
+                  }}
+                  type="button"
+                >
+                  {localize("+ Adicionar jogadores", language)}
+                </button>
               </div>
               {game.playerIds.length > 0 && (
                 <div className="player-list-header">
@@ -2899,6 +2833,90 @@ export function PlayMateApp() {
           </div>
         </fieldset>
       ) : null}
+      {game && isPlayerPickerOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="player-picker-title"
+            aria-modal="true"
+            className="confirm-dialog player-picker-modal"
+            role="dialog"
+          >
+            <p className="form-mode" id="player-picker-title">
+              {localize("Adicionar jogadores", language)}
+            </p>
+            <div className="player-picker-controls">
+              <input
+                aria-label={localize("Buscar jogadores", language)}
+                autoComplete="off"
+                autoFocus
+                onChange={(event) => setAdminPlayerSearch(event.target.value)}
+                placeholder={localize("Buscar jogadores", language)}
+                value={adminPlayerSearch}
+              />
+              <button
+                className="primary"
+                onClick={() => {
+                  setIsPlayerPickerOpen(false);
+                  setEditPlayer(null);
+                  setPlayerForm(emptyPlayer);
+                  setPlayerFormError("");
+                  setIsPlayerFormOpen(true);
+                }}
+                type="button"
+              >
+                {localize("+ Criar jogador", language)}
+              </button>
+            </div>
+            <div className="player-picker-results">
+              {playerSearchResults.length ? (
+                playerSearchResults.map((player) => {
+                  const isListed = game.playerIds.includes(player.id);
+                  const isWaiting = game.waitlistIds.includes(player.id);
+
+                  return (
+                    <div key={player.id}>
+                      <span>
+                        {player.name}
+                        <GuestTag player={player} language={language} />
+                        {isCurrentUserPlayer(player, currentUser) &&
+                          ` (${localize("você", language)})`}
+                      </span>
+                      {isListed ? (
+                        <small>{localize("na lista", language)}</small>
+                      ) : isWaiting ? (
+                        <small>{localize("na lista de espera", language)}</small>
+                      ) : (
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            addPlayerToGame(game, player.id, updateGame)
+                          }
+                          type="button"
+                        >
+                          {localize("Adicionar", language)}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="empty">
+                  {localize("Nenhum jogador cadastrado.", language)}
+                </p>
+              )}
+            </div>
+            <div className="confirm-dialog-actions">
+              <button
+                className="secondary"
+                onClick={() => setIsPlayerPickerOpen(false)}
+                type="button"
+              >
+                {localize("Fechar", language)}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {game && isPlayerFormOpen && (
         <div className="modal-backdrop" role="presentation">
           <section

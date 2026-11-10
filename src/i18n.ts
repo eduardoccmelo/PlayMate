@@ -224,6 +224,9 @@ export const translations: Record<
     "ou participe": "or join",
     "Busque seu nome": "Search your name",
     "Buscar jogadores": "Search players",
+    "Nenhum jogador encontrado.": "No players found.",
+    "Adicionar jogadores": "Add players",
+    "+ Adicionar jogadores": "+ Add players",
     "Confirmar presença": "Confirm attendance",
     "Não encontrou seu nome?": "Can't find your name?",
     "Seu nome completo": "Your full name",
@@ -378,8 +381,6 @@ export const translations: Record<
     "Adicionar novo jogador": "Add new player",
     "Adicionando jogador": "Adding player",
     "Editando jogador": "Editing player",
-    "Jogador adicionado com sucesso.": "Player added successfully.",
-    "Jogador atualizado com sucesso.": "Player updated successfully.",
     "O nome deve ter no máximo 12 caracteres.":
       "The name can have at most 12 characters.",
     "O nome deve ter no máximo 20 caracteres.":

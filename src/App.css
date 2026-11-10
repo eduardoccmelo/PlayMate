@@ -1780,29 +1780,11 @@ header {
     0 18px 45px rgb(14 31 22 / 22%);
 }
 .admin-player-search {
-  position: relative;
   margin: 14px 0 4px;
 }
-.admin-player-search-controls {
-  display: flex;
-  gap: 8px;
-}
-.admin-player-search-input {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-}
-.admin-player-search-controls input {
+.player-picker-button {
   width: 100%;
-  min-height: var(--action-button-height);
-  height: var(--action-button-height);
-}
-.admin-player-search-controls .primary {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.admin-player-search input {
-  width: 100%;
+  margin: 0;
 }
 .form-mode {
   width: fit-content;
@@ -1835,9 +1817,19 @@ header {
   border: 1px solid #dce5dd;
   border-radius: 8px;
 }
+.directory-player-search {
+  margin-top: 18px;
+}
+.directory-player-search input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d4dfd5;
+  border-radius: 8px;
+}
 .directory-player-list {
   max-height: 352px;
-  margin-top: 18px;
+  margin-top: 8px;
   background: #fff;
   text-align: left;
   padding: 6px 6px 0 22px;
@@ -1919,20 +1911,36 @@ header {
   min-width: 0;
   margin: 0;
 }
-.admin-player-search-results {
-  position: absolute;
-  z-index: 2;
-  top: calc(100% + 4px);
-  right: 0;
-  left: 0;
-  max-height: 260px;
+.player-picker-modal {
+  width: min(100%, 560px);
+  max-height: calc(100dvh - 40px);
+  text-align: left;
+}
+.player-picker-controls {
+  display: flex;
+  gap: 8px;
+}
+.player-picker-controls input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--action-button-height);
+  padding: 0 10px;
+  border: 1px solid #d4dfd5;
+  border-radius: 7px;
+}
+.player-picker-controls .primary {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+.player-picker-results {
+  max-height: min(52dvh, 380px);
   overflow-y: auto;
   border: 1px solid #d4dfd5;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 10px 24px rgb(23 60 43 / 15%);
 }
-.admin-player-search-results > div,
+.player-picker-results > div,
 .waitlist-player {
   display: flex;
   align-items: center;
@@ -1941,16 +1949,16 @@ header {
   border-top: 1px solid #edf0ed;
   text-align: left;
 }
-.admin-player-search-results > div:first-child {
+.player-picker-results > div:first-child {
   border-top: 0;
 }
-.admin-player-search-results span,
+.player-picker-results span,
 .waitlist-player strong {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.admin-player-search-results small {
+.player-picker-results small {
   color: #839087;
 }
 .waitlist-inline {
@@ -3125,16 +3133,6 @@ header {
   }
   .game-management-title-row > .game-directory-actions > .past-games-button {
     display: none;
-  }
-}
-@media (max-width: 500px) {
-  .admin-player-search-controls {
-    flex-wrap: wrap;
-  }
-  .admin-player-search-input,
-  .admin-player-search-controls .primary {
-    flex-basis: 100%;
-    width: 100%;
   }
 }
 @media (min-width: 651px) and (max-width: 1000px) {

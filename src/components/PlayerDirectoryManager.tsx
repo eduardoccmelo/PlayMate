@@ -34,6 +34,7 @@ export function PlayerDirectoryManager({
   const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const closeModal = () => {
     setMode(null);
@@ -81,6 +82,12 @@ export function PlayerDirectoryManager({
     if (ownsPlayer(first) !== ownsPlayer(second)) return ownsPlayer(first) ? -1 : 1;
     return first.name.localeCompare(second.name, language === "pt" ? "pt-BR" : "en");
   });
+  const playerSearchTerm = playerSearch.trim().toLocaleLowerCase();
+  const visiblePlayers = sortedPlayers.filter(
+    (player) =>
+      !playerSearchTerm ||
+      player.name.toLocaleLowerCase().includes(playerSearchTerm),
+  );
   const isEditingOwnPlayer = Boolean(editingPlayer && ownsPlayer(editingPlayer));
   return (
     <section className="directory-manager">
@@ -102,9 +109,21 @@ export function PlayerDirectoryManager({
         </button>
       </div>
 
+      {players.length > 0 && (
+        <div className="directory-player-search">
+          <input
+            aria-label={localize("Buscar jogadores", language)}
+            autoComplete="off"
+            onChange={(event) => setPlayerSearch(event.target.value)}
+            placeholder={localize("Buscar jogadores", language)}
+            type="search"
+            value={playerSearch}
+          />
+        </div>
+      )}
       <div className="directory-player-results directory-player-list">
-        {players.length ? (
-          sortedPlayers.map((player) => (
+        {visiblePlayers.length ? (
+          visiblePlayers.map((player) => (
             <div key={player.id}>
               <span>
                 {player.name}
@@ -142,7 +161,12 @@ export function PlayerDirectoryManager({
           ))
         ) : (
           <p className="empty">
-            {localize("Nenhum jogador cadastrado.", language)}
+            {localize(
+              players.length
+                ? "Nenhum jogador encontrado."
+                : "Nenhum jogador cadastrado.",
+              language,
+            )}
           </p>
         )}
       </div>
