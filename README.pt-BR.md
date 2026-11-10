@@ -82,7 +82,7 @@ Cada jogo possui:
 - custo da quadra e moeda (`EUR`, `USD`, `GBP` ou `BRL`);
 - número máximo de jogadores;
 - número da quadra opcional;
-- informações de pagamento;
+- informações de pagamento opcionais;
 - aviso opcional aos participantes, com até 100 caracteres.
 
 Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo layout somente leitura para participantes e admins, inclusive com os times já gerados. Para participantes, permanece visível por até 24 horas; admins continuam podendo visualizá-lo ou excluí-lo manualmente.

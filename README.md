@@ -82,7 +82,7 @@ Every game includes:
 - court cost and currency (`EUR`, `USD`, `GBP`, or `BRL`);
 - maximum number of players;
 - optional court number;
-- payment details; and
+- optional payment details; and
 - an optional player notice of up to 100 characters.
 
 Games are displayed in chronological order. A completed game always uses the same read-only layout for participants and organizers, including an existing team-balance snapshot. For participants it remains visible for 24 hours; organizers can continue to view or delete it manually.

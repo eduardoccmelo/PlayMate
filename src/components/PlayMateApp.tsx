@@ -799,8 +799,7 @@ export function PlayMateApp() {
       !gameForm.time ||
       !gameForm.duration ||
       !gameForm.courtCost ||
-      !gameForm.maxPlayers ||
-      !gameForm.paymentInfo
+      !gameForm.maxPlayers
     ) {
       setGameFormError("Preencha todos os detalhes do jogo.");
       return;

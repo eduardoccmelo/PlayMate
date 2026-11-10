@@ -190,12 +190,12 @@ export function GameForm({
         <input required min="2" max="999" type="number" placeholder={text("Ex.: 12")} value={draft.maxPlayers || ""} onChange={(event) => onChange({ ...draft, maxPlayers: +event.target.value })} />
       </label>
       <label className="game-field court-field">
-        <span>{text("Número da quadra")}</span>
+        <span>{text("Número da quadra (opcional)")}</span>
         <input maxLength={20} placeholder={text("Ex.: 3")} value={draft.courtNumber} onChange={(event) => onChange({ ...draft, courtNumber: event.target.value })} />
       </label>
       <label className="game-field payment-field">
-        <span>{text("Informações de pagamento")}</span>
-        <input required maxLength={20} placeholder={text("Ex.: Pix, PayPal ou conta bancária")} value={draft.paymentInfo} onChange={(event) => onChange({ ...draft, paymentInfo: event.target.value })} />
+        <span>{text("Informações de pagamento (opcional)")}</span>
+        <input maxLength={20} placeholder={text("Ex.: Pix, PayPal ou conta bancária")} value={draft.paymentInfo} onChange={(event) => onChange({ ...draft, paymentInfo: event.target.value })} />
       </label>
       <label className="game-field disclaimer-field">
         <span>{text("Aviso aos jogadores (opcional)")}</span>
