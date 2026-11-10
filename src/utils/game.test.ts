@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GameSession } from "../types";
 import {
+  durationInMinutes,
   endTimeFromDuration,
+  gameEndTimestamp,
   hasGameEnded,
   isVisibleToParticipants,
   today,
@@ -31,9 +33,10 @@ const game = (overrides: Partial<GameSession> = {}): GameSession => ({
 });
 
 describe("game time helpers", () => {
-  it("calculates end time without allowing a game to cross midnight", () => {
+  it("calculates end time across midnight", () => {
     expect(endTimeFromDuration("20:00", 75)).toBe("21:15");
-    expect(endTimeFromDuration("23:30", 60)).toBe("");
+    expect(endTimeFromDuration("23:30", 60)).toBe("00:30");
+    expect(durationInMinutes("23:30", "00:30")).toBe(60);
   });
 
   it("uses the end time, not the start time, to close a game", () => {
@@ -42,6 +45,19 @@ describe("game time helpers", () => {
     expect(hasGameEnded(game())).toBe(false);
     vi.setSystemTime(new Date(2026, 9, 10, 11, 15));
     expect(hasGameEnded(game())).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("keeps a game open until its next-day end time", () => {
+    vi.useFakeTimers();
+    const overnightGame = game({ time: "23:30", endTime: "00:30", duration: 60 });
+    expect(gameEndTimestamp(overnightGame)).toBe(
+      new Date(2026, 9, 11, 0, 30).getTime(),
+    );
+    vi.setSystemTime(new Date(2026, 9, 11, 0, 29));
+    expect(hasGameEnded(overnightGame)).toBe(false);
+    vi.setSystemTime(new Date(2026, 9, 11, 0, 30));
+    expect(hasGameEnded(overnightGame)).toBe(true);
     vi.useRealTimers();
   });
 

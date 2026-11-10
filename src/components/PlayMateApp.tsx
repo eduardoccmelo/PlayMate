@@ -809,10 +809,6 @@ export function PlayMateApp() {
       return;
     }
     const endTime = endTimeFromDuration(gameForm.time, gameForm.duration);
-    if (!endTime) {
-      setGameFormError("A duração precisa terminar no mesmo dia.");
-      return;
-    }
     if (
       !editGame &&
       new Date(`${gameForm.date}T${gameForm.time}:00`).getTime() <= Date.now()
@@ -1741,7 +1737,6 @@ export function PlayMateApp() {
           )
             return "Não é possível criar um jogo em um horário passado.";
           const endTime = endTimeFromDuration(draft.time, draft.duration);
-          if (!endTime) return "A duração precisa terminar no mesmo dia.";
           const newGame = lockBalanceWindow({
             id: nextIdentifier(games),
             ...draft,

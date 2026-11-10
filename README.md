@@ -77,7 +77,7 @@ Every game includes:
 - location;
 - date and automatically calculated weekday;
 - start time;
-- a duration from 45 minutes to 3 hours, in 15-minute intervals;
+- a duration from 45 minutes to 3 hours, in 15-minute intervals, including across local midnight;
 - automatically calculated end time;
 - court cost and currency (`EUR`, `USD`, `GBP`, or `BRL`);
 - maximum number of players;

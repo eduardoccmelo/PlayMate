@@ -77,7 +77,7 @@ Cada jogo possui:
 - local;
 - data e dia da semana calculado automaticamente;
 - horário de início;
-- duração entre 45 minutos e 3 horas, em intervalos de 15 minutos;
+- duração entre 45 minutos e 3 horas, em intervalos de 15 minutos, inclusive atravessando a meia-noite local;
 - horário de término calculado automaticamente;
 - custo da quadra e moeda (`EUR`, `USD`, `GBP` ou `BRL`);
 - número máximo de jogadores;

@@ -104,7 +104,7 @@ Names are unique case-insensitively within a group and an active game list. Crea
 4. The authorized game manager may use the **All paid** checkbox to update every confirmed main-list player at once; waiting-list entries are never included.
 5. For an admin-created game, automatic and manual balances share a quota of **three** standard balances. For a participant-created game, that quota is **two**.
 6. Changing the roster or payment state clears the active team snapshot but never restores a spent balance quota.
-7. Once the standard quota is spent, exactly one final manual rebalance opens 15 minutes before kickoff. It remains available through the final second of the game and can be used once.
+7. Once the standard quota is spent, exactly one final manual rebalance opens 15 minutes before kickoff. It remains available through the final second of the game and can be used once. A game may cross local midnight; its end instant is the following calendar day whenever the wall-clock end time is earlier than or equal to its start time.
 8. The latest balance replaces the previous snapshot and status message. The algorithm favors a different comparably fair split rather than only switching the two team labels.
 
 Admin-created games show the latest trigger, the responsible admin when relevant, and the balance count. Participant-created games hide player skill data and admin identities.

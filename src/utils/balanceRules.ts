@@ -1,5 +1,5 @@
 import type { BalanceHistoryEntry, GameSession, Player } from "../types";
-import { gameTimestamp } from "./game";
+import { gameEndTimestamp, gameTimestamp } from "./game";
 import { playerScoreBreakdown } from "./teamBalancer";
 
 export const MAX_STANDARD_BALANCES = 3;
@@ -23,7 +23,7 @@ export const lockedBalanceWindow = (game: GameSession) => {
       ? startAt
       : scheduledAt - FINAL_REBALANCE_WINDOW,
     // The final attempt opens before kickoff but remains possible during play.
-    end: gameTimestamp(game, game.endTime || game.time),
+    end: gameEndTimestamp(game),
   };
 };
 
@@ -51,7 +51,7 @@ export const reanchorBalanceWindow = (game: GameSession): GameSession => {
       scheduledAt - FINAL_REBALANCE_WINDOW,
     ).toISOString(),
     balanceWindowEndAt: new Date(
-      gameTimestamp(game, game.endTime || game.time),
+      gameEndTimestamp(game),
     ).toISOString(),
   };
 };

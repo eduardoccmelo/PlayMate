@@ -285,8 +285,6 @@ export const translations: Record<
       "You cannot create a game at a time that has already passed.",
     "O horário de término deve ser posterior ao início.":
       "End time must be after start time.",
-    "A duração precisa terminar no mesmo dia.":
-      "The duration must end on the same day.",
     "Esse nome já está na lista.": "This name is already on the list.",
     "Já existe um grupo com esse nome.":
       "A group with this name already exists.",
