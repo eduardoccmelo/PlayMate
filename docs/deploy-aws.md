@@ -10,7 +10,7 @@ internet ──:80──> frontend (nginx) ──/api/*──> backend:8000 ─�
 
 ## 1. Instance
 
-- Ubuntu 24.04 LTS, `t3.small` or larger (the Node build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
+- Ubuntu 24.04 LTS, `t3.small` or larger (the Node 22 build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
 - Security group inbound: **80** (and **443** once TLS is added) from anywhere, **22** from your IP only. Do not open 5432 or 8000.
 - Install Docker Engine + Compose plugin from Docker's repository (the Ubuntu `docker.io` package ships an old Compose):
 

@@ -207,7 +207,7 @@ New players always start with level 3, neutral speed, neutral condition, and neu
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 20 or later
+- [Node.js](https://nodejs.org/) 22 or later
 - npm 10 or later
 
 ### Installation

@@ -207,7 +207,7 @@ Todos os novos jogadores começam com os valores padrão: nível 3, velocidade n
 
 ### Pré-requisitos
 
-- [Node.js](https://nodejs.org/) 20 ou superior
+- [Node.js](https://nodejs.org/) 22 ou superior
 - npm 10 ou superior
 
 ### Instalação
