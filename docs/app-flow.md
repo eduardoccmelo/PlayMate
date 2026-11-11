@@ -87,9 +87,10 @@ flowchart TD
   B -- No --> D[Verify name + email and create game-only profile]
   D --> G{Main list has capacity?}
   C --> G
-  G -- Yes --> H[Confirmed / payment pending]
+  G -- Yes --> H[Confirmed]
   G -- No --> I[Waiting list]
-  H --> J[Player may mark only their own payment]
+  H --> J{Payment tracking enabled?}
+  J -- Yes --> M[Player may mark only their own payment]
   H --> K[Player may leave their own entry]
   K --> L[First waiting player promoted automatically]
 ```
@@ -98,14 +99,13 @@ Names are unique case-insensitively within a group and an active game list. Crea
 
 ## Team balancing
 
-1. Only **paid, confirmed main-list players** are eligible. Waiting-list and unpaid players are excluded.
-2. At least two eligible players are required for manual balancing.
-3. A full, fully paid main list automatically creates the next available standard balance.
-4. The authorized game manager may use the **All paid** checkbox to update every confirmed main-list player at once; waiting-list entries are never included.
-5. For an admin-created game, automatic and manual balances share a quota of **three** standard balances. For a participant-created game, that quota is **two**.
-6. Changing the roster or payment state clears the active team snapshot but never restores a spent balance quota.
-7. Once the standard quota is spent, exactly one final manual rebalance opens 15 minutes before kickoff. It remains available through the final second of the game and can be used once. A game may cross local midnight; its end instant is the following calendar day whenever the wall-clock end time is earlier than or equal to its start time.
-8. The latest balance replaces the previous snapshot and status message. The algorithm favors a different comparably fair split rather than only switching the two team labels.
+1. Payment tracking is a game-level opt-in. With it enabled, only **paid, confirmed main-list players** are eligible; without it, every confirmed main-list player is eligible. Waiting-list players are always excluded.
+2. At least two eligible players are required for manual balancing. The app never balances automatically.
+3. The authorized game manager may use **All paid** only on a payment-controlled game; waiting-list entries are never included.
+4. A payment-controlled game may set a `1–7` day deadline. Each added player receives an individual due instant; an unpaid confirmed player moves automatically to the waiting list when it expires and cannot be auto-promoted while overdue.
+5. Every game has **three** manual standard balances, regardless of creator role. Changing a roster or eligible-payment state clears the active snapshot but never restores or consumes quota.
+6. Once the standard quota is spent, exactly one final manual rebalance opens 15 minutes before kickoff. It remains available through the final second of the game and can be used once. A game may cross local midnight; its end instant is the following calendar day whenever the wall-clock end time is earlier than or equal to its start time.
+7. The latest balance replaces the previous snapshot and status message. The algorithm favors a different comparably fair split rather than only switching the two team labels.
 
 Admin-created games show the latest trigger, the responsible admin when relevant, and the balance count. Participant-created games hide player skill data and admin identities.
 
@@ -123,6 +123,6 @@ Admin-created games show the latest trigger, the responsible admin when relevant
 3. Grupo pode ser acessado por link/código: convite de admin exige senha; convite de participante não. Jogo pode ser acessado por link/código sem entrar no grupo; após confirmar nome e e-mail, a pessoa entra diretamente na lista principal ou de espera.
 4. Admin administra o grupo inteiro. Participante também pode criar um jogo, mas vira organizador somente daquele jogo: lista, pagamentos, criação de jogadores e times. Não ganha estatísticas, atributos técnicos nem administração do grupo ou de outros jogos.
 5. Membro do grupo entra direto no jogo com o próprio perfil; se estiver cheio, vai para espera. Quem recebeu apenas o convite do jogo tem esse mesmo acesso limitado ao jogo, sem entrar no grupo. Cada pessoa altera apenas o próprio pagamento e sai apenas da própria vaga.
-6. Balanceamento usa apenas jogadores confirmados e pagos. Jogo de admin tem três gerações regulares; jogo criado por participante tem duas. Depois existe apenas um rebalanceamento manual final: ele abre 15 minutos antes do horário vigente e permanece disponível até o último segundo do jogo. Todo balanceamento fica desativado quando o jogo termina. Alterar lista ou pagamento não reinicia limites. Ao remarcar data ou horário, a abertura da janela final é recalculada para os 15 minutos anteriores ao novo início, mas não concede outro rebalanceamento final nem reinicia a cota. A remarcação registra horário anterior, novo horário e admin responsável. Se ela antecipar o início, o aviso da janela final e, caso usado, o histórico do rebalanceamento final mostram essa autoria. Uma substituição só preserva os times se o conjunto de assinaturas de balanceamento continuar igual: posição, nível, velocidade e condição; IDs e ordem da lista são ignorados. Caso contrário, dispara o próximo balanceamento automático disponível. A criação do jogo exige data/hora de início posterior ao horário local atual.
+6. Jogos com controle de pagamento usam apenas jogadores pagos e confirmados no balanceamento; sem controle, usam todos os confirmados. A espera nunca entra. Cada jogo tem três balanceamentos manuais regulares e um único rebalanceamento final que abre 15 minutos antes do início e permanece disponível até o fim. Mudanças de lista ou de elegibilidade invalidam times, mas nunca geram um balanceamento automático, consomem ou reiniciam cotas. O prazo opcional de 1–7 dias é individual: um confirmado não pago vai para a espera ao vencer e não volta automaticamente. A criação exige data/hora de início posterior ao horário local atual.
 7. Jogador criado manualmente recebe a etiqueta **Convidado/Guest**: não possui conta nem acesso ao app. Um usuário com e-mail confirmado e acesso apenas a um jogo é um usuário registrado com escopo de jogo, não um convidado manual.
 8. Cada grupo possui um único **criador/owner**. Só ele altera a senha ou deleta o grupo; admin comum altera somente o nome. O Painel do admin concentra estatísticas, admins, convite direcionado e a votação de nível/velocidade. Um admin pode votar também nas próprias notas somente no Painel do admin; todos os votos têm o mesmo peso na média. O modal de editar jogador permite alterar somente posição e condição próprias. Ao criar um convidado manualmente como admin, as notas informadas já são registradas como o primeiro voto desse admin.

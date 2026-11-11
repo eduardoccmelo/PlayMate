@@ -42,9 +42,9 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - Exclusão de um jogador do cadastro geral, com confirmação.
 - Consulta e dispensa de notificações de alteração de pagamento.
 - Inclusão e remoção de jogadores da lista de cada jogo.
-- Controle de pagamento por checkbox.
+- Configuração de controle de pagamento e de prazo individual opcional por jogo.
 - Estatísticas do grupo: total de jogos, jogos ativos e participações de cada jogador em jogos concluídos.
-- Geração de times apenas com jogadores pagos da lista principal. Lista completa e totalmente paga gera times automaticamente; os limites dependem de o jogo ser de admin ou de organizador participante.
+- Geração manual de times: todo jogo possui três tentativas regulares e uma final liberada 15 minutos antes do início.
 - Visualização dos pontos de balanceamento de cada jogador, exclusiva do painel administrativo.
 
 ### Governança dos admins e notas dos jogadores
@@ -82,21 +82,21 @@ Cada jogo possui:
 - custo da quadra e moeda (`EUR`, `USD`, `GBP` ou `BRL`);
 - número máximo de jogadores;
 - número da quadra opcional;
-- informações de pagamento opcionais;
+- controle de pagamento opcional, informações de pagamento opcionais e prazo de `1–7` dias por jogador;
 - aviso opcional aos participantes, com até 100 caracteres.
 
 Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo layout somente leitura para participantes e admins, inclusive com os times já gerados. Para participantes, permanece visível por até 24 horas; admins continuam podendo visualizá-lo ou excluí-lo manualmente.
 
-### Listas e pagamentos
+### Listas e pagamentos opcionais
 
 - A capacidade do jogo é definida pelo organizador.
 - Quando a lista principal está cheia, novos participantes entram na lista de espera, em ordem de chegada.
-- Ao remover alguém da lista principal, a primeira pessoa da espera é promovida automaticamente como pendente.
+- Ao remover alguém da lista principal, a primeira pessoa elegível da espera é promovida automaticamente.
 - O valor por pessoa é calculado usando somente os jogadores da lista principal; a lista de espera não altera a divisão do custo.
-- Marcar um jogador como pago também o confirma para o jogo.
-- O organizador autorizado pode usar o checkbox **Todos pagos** para atualizar de uma vez todos os jogadores confirmados da lista principal; jogadores da espera não são alterados.
-- Jogadores pagos ficam agrupados no topo da lista, preservando a ordem entre os já pagos.
-- A geração manual de times fica disponível com pelo menos dois jogadores pagos da lista principal. Com lista completa e todos pagos, os times são gerados automaticamente.
+- Controle, rótulos e notificações de pagamento, inclusive **Todos pagos**, existem somente quando o jogo opta por controlar pagamentos. Sem essa opção, o jogo não possui UI nem estado de pagamento.
+- Quando habilitado, o organizador pode atualizar de uma vez todos os jogadores confirmados da lista principal; jogadores da espera não são alterados. Pagos ficam no topo, preservando a ordem entre eles.
+- Com prazo habilitado, cada jogador adicionado recebe seu próprio vencimento. Se continuar sem pagamento ao vencer, sai automaticamente da lista principal e vai para a espera; não volta automaticamente até pagar ou ser gerenciado manualmente.
+- A geração manual de times exige ao menos dois jogadores elegíveis: pagos na lista principal em jogos com controle de pagamento, ou qualquer jogador confirmado em jogos sem esse controle. Nunca há geração automática.
 - Um jogador da lista de espera pode ser incluído manualmente na lista principal. Ele ocupa a última vaga pendente, e o jogador substituído passa para a lista de espera.
 
 ### Idiomas e interface
@@ -137,9 +137,10 @@ Esses códigos servem somente para testar a interface. Em produção, devem ser 
 
 | Situação | Comportamento |
 | --- | --- |
-| Lista principal com vaga | O jogador entra como pendente de pagamento. |
+| Lista principal com vaga | O jogador entra confirmado; fica pendente somente quando houver controle de pagamento. |
 | Lista principal cheia | O jogador entra na lista de espera. |
-| Jogador principal removido | A primeira pessoa da espera sobe automaticamente como pendente. |
+| Jogador principal removido | A primeira pessoa elegível da espera sobe automaticamente. |
+| Prazo de pagamento vence | Jogador confirmado sem pagamento vai para a espera. |
 | Jogador da espera incluído manualmente | Troca com a última pessoa pendente da lista principal. |
 | Jogador marcado como pago | Fica confirmado, sobe para a área de pagos e passa a ser elegível aos times. |
 | Jogador removido da lista do jogo | Continua no cadastro geral do grupo. |
@@ -147,14 +148,14 @@ Esses códigos servem somente para testar a interface. Em produção, devem ser 
 
 ## Balanceamento dos times
 
-Somente jogadores pagos na lista principal entram no balanceamento; jogadores não pagos e da lista de espera nunca entram. A geração manual exige pelo menos dois jogadores pagos. Quando a lista principal está completa e todos estão pagos, o PlayMate gera automaticamente o primeiro balanceamento disponível.
+Em jogos com controle de pagamento, somente jogadores pagos e confirmados entram no balanceamento; sem esse controle, todos os confirmados entram. A lista de espera nunca entra no cálculo. A geração manual exige pelo menos dois jogadores elegíveis e nunca acontece automaticamente.
 
-O limite é propositalmente pequeno: o balanceamento deve ser a etapa final da preparação, de preferência no dia do jogo. Uma mudança real na lista ou no pagamento invalida os times exibidos e pode consumir o próximo balanceamento automático disponível, mas nunca reinicia o limite. Uma substituição só não recalcula quando os atributos finais de balanceamento forem idênticos: posição, nível, velocidade e condição. A ID e a ordem na lista não interferem nessa comparação. Ao remarcar o jogo, a abertura da janela final é recalculada a partir do novo horário, mas a cota normal e o único rebalanceamento final nunca são reiniciados. A última tentativa abre 15 minutos antes do início e permanece disponível até o último segundo do jogo; todo balanceamento é desativado quando ele termina. Quando um admin antecipa o jogo, o aviso de disponibilidade mostra quem fez a alteração; se o rebalanceamento final for usado, essa autoria também fica registrada no histórico. Não é possível criar um jogo com data/hora de início igual ou anterior ao horário local atual.
+O balanceamento deve ser a etapa final da preparação. Mudanças na lista ou no estado elegível invalidam os times, mas nunca disparam outro balanceamento nem reiniciam cotas. Cada jogo possui três tentativas manuais regulares. A última tentativa abre 15 minutos antes do início e permanece disponível até o fim do jogo; todo balanceamento fica desativado depois disso. Ao remarcar, a janela final é recalculada, sem criar uma nova tentativa. Não é possível criar um jogo com data/hora de início igual ou anterior ao horário local atual.
 
-| Responsável pelo jogo | Balanceamentos regulares (automático/manual combinados) | Janela final |
+| Responsável pelo jogo | Balanceamentos manuais regulares | Janela final |
 | --- | ---: | --- |
 | Admin do grupo | 3 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
-| Participante do grupo | 2 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
+| Participante do grupo | 3 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
 
 Nos jogos gerenciados por admin, o último aviso informa se o balanceamento foi automático ou disparado por admin, identifica o responsável quando aplicável e mostra a contagem. Em jogos criados por participante, nenhum nome de admin nem atributo de jogador é exibido. Cada novo balanceamento substitui o aviso e o snapshot anterior. Sempre que houver alternativa justa, o algoritmo escolhe uma composição diferente; apenas inverter Time A e Time B não conta como nova divisão.
 

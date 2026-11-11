@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GameSession, Player } from "../types";
 import {
   appendBalanceHistory,
+  balanceEligiblePlayerIds,
   hasCurrentTeamRoster,
   hasEquivalentBalanceRoster,
   isFinalRebalanceWindow,
@@ -45,9 +46,17 @@ const game = (overrides: Partial<GameSession> = {}): GameSession => ({
 });
 
 describe("balance rules", () => {
-  it("keeps distinct standard quotas for admin and participant organizers", () => {
+  it("keeps three manual standard balances for every organizer role", () => {
     expect(standardBalanceLimit(game())).toBe(3);
-    expect(standardBalanceLimit(game({ createdByRole: "participant" }))).toBe(2);
+    expect(standardBalanceLimit(game({ createdByRole: "participant" }))).toBe(3);
+  });
+
+  it("uses all confirmed players when a game does not track payments", () => {
+    const withoutPaymentTracking = game({
+      paymentTrackingEnabled: false,
+      paidPlayerIds: [],
+    });
+    expect(balanceEligiblePlayerIds(withoutPaymentTracking)).toEqual([1, 2]);
   });
 
   it("opens the final balance window exactly fifteen minutes before kickoff", () => {

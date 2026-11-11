@@ -1,19 +1,22 @@
 import type { BalanceHistoryEntry, GameSession, Player } from "../types";
-import { gameEndTimestamp, gameTimestamp } from "./game";
+import { gameEndTimestamp, gameTimestamp, hasPaymentTracking } from "./game";
 import { playerScoreBreakdown } from "./teamBalancer";
 
 export const MAX_STANDARD_BALANCES = 3;
-export const MAX_PARTICIPANT_STANDARD_BALANCES = 2;
 export const FINAL_REBALANCE_WINDOW = 15 * 60 * 1000;
 
 export const isGameReadyForBalancing = (game: GameSession) =>
-  game.playerIds.length === game.maxPlayers &&
-  game.playerIds.every((playerId) => game.paidPlayerIds.includes(playerId));
+  balanceEligiblePlayerIds(game).length >= 2;
 
-export const standardBalanceLimit = (game: GameSession) =>
-  game.createdByRole === "participant"
-    ? MAX_PARTICIPANT_STANDARD_BALANCES
-    : MAX_STANDARD_BALANCES;
+export const balanceEligiblePlayerIds = (game: GameSession) =>
+  hasPaymentTracking(game)
+    ? game.playerIds.filter((playerId) => game.paidPlayerIds.includes(playerId))
+    : game.playerIds;
+
+export const standardBalanceLimit = (game: GameSession) => {
+  void game;
+  return MAX_STANDARD_BALANCES;
+};
 
 export const lockedBalanceWindow = (game: GameSession) => {
   const scheduledAt = gameTimestamp(game);
@@ -70,9 +73,9 @@ export const hasCurrentTeamRoster = (game: GameSession) => {
     (player) => player.id,
   );
   return (
-    assignedIds.length === game.playerIds.length &&
+    assignedIds.length === balanceEligiblePlayerIds(game).length &&
     new Set(assignedIds).size === assignedIds.length &&
-    assignedIds.every((playerId) => game.playerIds.includes(playerId))
+    assignedIds.every((playerId) => balanceEligiblePlayerIds(game).includes(playerId))
   );
 };
 

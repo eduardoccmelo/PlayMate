@@ -10,11 +10,54 @@ export const emptyGameDraft = {
   courtCost: 0,
   currency: "EUR" as GameSession["currency"],
   maxPlayers: 0,
+  paymentTrackingEnabled: false,
+  paymentDeadlineDays: null as number | null,
   paymentInfo: "",
   disclaimer: "",
 };
 
 export type GameDraft = typeof emptyGameDraft;
+
+/** Legacy persisted games did not store this option and therefore retain payment tracking. */
+export const hasPaymentTracking = (game: GameSession) =>
+  game.paymentTrackingEnabled ?? true;
+
+export const paymentDeadlineFor = (game: GameSession, playerId: number) =>
+  game.paymentDueAtByPlayerId?.[playerId];
+
+export const isPaymentOverdue = (
+  game: GameSession,
+  playerId: number,
+  now = Date.now(),
+) => {
+  const dueAt = paymentDeadlineFor(game, playerId);
+  return (
+    hasPaymentTracking(game) &&
+    !game.paidPlayerIds.includes(playerId) &&
+    Boolean(dueAt) &&
+    Date.parse(dueAt!) <= now
+  );
+};
+
+export const addPaymentDeadline = (
+  game: GameSession,
+  playerId: number,
+  now = Date.now(),
+) => {
+  if (
+    !hasPaymentTracking(game) ||
+    !game.paymentDeadlineDays ||
+    game.paymentDueAtByPlayerId?.[playerId]
+  )
+    return game;
+  return {
+    ...game,
+    paymentDueAtByPlayerId: {
+      ...game.paymentDueAtByPlayerId,
+      [playerId]: new Date(now + game.paymentDeadlineDays * 86_400_000).toISOString(),
+    },
+  };
+};
 
 export const availableTimeSlots = Array.from({ length: 68 }, (_, index) => {
   const totalMinutes = (index + 28) * 15;

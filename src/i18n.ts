@@ -191,6 +191,11 @@ export const translations: Record<
     Pago: "Paid",
     "Todos pagos": "All paid",
     "Marcar todos como pagos": "Mark all as paid",
+    "Incluir controle de pagamento": "Include payment tracking",
+    "Incluir prazo de pagamento": "Include payment deadline",
+    Prazo: "Deadline",
+    dia: "day",
+    dias: "days",
     PAGAMENTO: "PAYMENT",
     "LISTA DE ESPERA": "WAITING LIST",
     "lista de espera": "waiting list",
@@ -199,8 +204,8 @@ export const translations: Record<
     "Gerar times": "Generate teams",
     "Balancear novamente": "Balance again",
     "Fazer o último balanceamento": "Make the final rebalance",
-    "Deixe o balanceamento como etapa final, de preferência no dia do jogo. Com a lista completa e todos pagos, os times são gerados automaticamente.":
-      "Leave team balancing as a final step, ideally on game day. When the list is full and everyone is paid, teams are generated automatically.",
+    "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.":
+      "Team balancing is manual. Use it when the list is ready; every game has three regular attempts and one final attempt available 15 minutes before kickoff.",
     "Rebalanceamentos manuais": "Manual rebalances",
     Balanceamentos: "Balances",
     de: "of",
@@ -208,8 +213,8 @@ export const translations: Record<
     Administrator: "Administrator",
     "Balanceamento final acionado pelo sistema.":
       "Final balance triggered by the system.",
-    "O limite foi atingido. O sistema gerará os times automaticamente 15 minutos antes do jogo.":
-      "The limit has been reached. The system will generate teams automatically 15 minutes before the game.",
+    "Adicione pelo menos 2 jogadores à lista para gerar os times.":
+      "Add at least 2 players to the list to generate teams.",
     Estatísticas: "Statistics",
     "Criador/Admin": "Owner/Admin",
     "Painel do admin": "Admin panel",

@@ -193,14 +193,66 @@ export function GameForm({
         <span>{text("Número da quadra (opcional)")}</span>
         <input maxLength={20} placeholder={text("Ex.: 3")} value={draft.courtNumber} onChange={(event) => onChange({ ...draft, courtNumber: event.target.value })} />
       </label>
-      <label className="game-field payment-field">
-        <span>{text("Informações de pagamento (opcional)")}</span>
-        <input maxLength={20} placeholder={text("Ex.: Pix, PayPal ou conta bancária")} value={draft.paymentInfo} onChange={(event) => onChange({ ...draft, paymentInfo: event.target.value })} />
-      </label>
+      {draft.paymentTrackingEnabled && (
+        <label className="game-field payment-field">
+          <span>{text("Informações de pagamento (opcional)")}</span>
+          <input maxLength={20} placeholder={text("Ex.: Pix, PayPal ou conta bancária")} value={draft.paymentInfo} onChange={(event) => onChange({ ...draft, paymentInfo: event.target.value })} />
+        </label>
+      )}
       <label className="game-field disclaimer-field">
         <span>{text("Aviso aos jogadores (opcional)")}</span>
         <input maxLength={20} placeholder={text("Ex.: Chegue 15 minutos antes")} value={draft.disclaimer ?? ""} onChange={(event) => onChange({ ...draft, disclaimer: event.target.value })} />
       </label>
+      <div className="payment-settings">
+        <label className="payment-setting-checkbox">
+          <input
+            checked={draft.paymentTrackingEnabled}
+            onChange={(event) =>
+              onChange({
+                ...draft,
+                paymentTrackingEnabled: event.target.checked,
+                paymentDeadlineDays: event.target.checked
+                  ? draft.paymentDeadlineDays
+                  : null,
+                paymentInfo: event.target.checked ? draft.paymentInfo : "",
+              })
+            }
+            type="checkbox"
+          />
+          <span>{text("Incluir controle de pagamento")}</span>
+        </label>
+        <label className="payment-setting-checkbox">
+          <input
+            checked={Boolean(draft.paymentDeadlineDays)}
+            disabled={!draft.paymentTrackingEnabled}
+            onChange={(event) =>
+              onChange({
+                ...draft,
+                paymentDeadlineDays: event.target.checked ? 1 : null,
+              })
+            }
+            type="checkbox"
+          />
+          <span>{text("Incluir prazo de pagamento")}</span>
+        </label>
+        {draft.paymentTrackingEnabled && draft.paymentDeadlineDays && (
+          <label className="payment-deadline-select">
+            <span>{text("Prazo")}</span>
+            <select
+              value={draft.paymentDeadlineDays}
+              onChange={(event) =>
+                onChange({ ...draft, paymentDeadlineDays: Number(event.target.value) })
+              }
+            >
+              {[1, 2, 3, 4, 5, 6, 7].map((days) => (
+                <option key={days} value={days}>
+                  {days} {text(days === 1 ? "dia" : "dias")}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
       <div className="game-form-actions">
         <button
           type="button"

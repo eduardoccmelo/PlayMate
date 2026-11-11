@@ -42,9 +42,9 @@ PlayMate is a web application for organizing group sports games. One profile can
 - Edit player names, position, and condition or remove a player from the directory with confirmation. Level and speed are governed by the admin vote, rather than being overwritten individually.
 - Review and dismiss payment-status notifications.
 - Add or remove players from an individual game list.
-- Track payment status with a checkbox.
+- Configure payment tracking and an optional per-player payment deadline for each game.
 - View group statistics: total games, active games, and completed-game participations per player.
-- Generate teams from paid main-list players only. A full, fully paid list generates teams automatically; balancing limits depend on whether the game belongs to a group admin or a participant organizer.
+- Generate teams manually. Each game has three regular balances and one final balance available from 15 minutes before kickoff until it ends.
 - See the score used for team balancing; this information is organizer-only.
 
 ### Admin governance and player ratings
@@ -63,9 +63,9 @@ PlayMate is a web application for organizing group sports games. One profile can
 - Membership, self-service payments, and organizer authority are resolved from the stable profile ID, never by a matching display name.
 - When a game is full, joining places the player on its waiting list.
 - A non-member can add a game by code, verify their identity, and join the main or waiting list without joining its group.
-- A game-only user can manage only their own entry and payment state.
-- A participant can update only their own payment checkbox and remove only their own name from a game.
-- A group participant may create a game. They gain organizer controls only for games they created: create players, manage that game's list and payment state, and generate teams. They never gain group settings, statistics, player-directory attributes, or control of other games.
+- A game-only user can manage only their own entry and, when that game enables payment tracking, payment state.
+- A participant can update only their own payment checkbox when payment tracking is enabled and can always remove only their own name from a game.
+- A group participant may create a game. They gain organizer controls only for games they created: create players, manage that game's list and its optional payment state, and generate teams. They never gain group settings, statistics, player-directory attributes, or control of other games.
 - In a participant-organized game, player levels, position, condition, speed, and scoring are hidden from the organizer UI.
 - Player names cannot be duplicated within a group or an active game list.
 - A manually created player is tagged **Guest**. It has no account or app access and keeps the identifier of the person who created it. When an admin creates one, the selected level and speed are recorded as that admin's initial vote.
@@ -82,21 +82,21 @@ Every game includes:
 - court cost and currency (`EUR`, `USD`, `GBP`, or `BRL`);
 - maximum number of players;
 - optional court number;
-- optional payment details; and
+- an opt-in payment-control setting, optional payment details, and an optional `1–7` day payment deadline; and
 - an optional player notice of up to 100 characters.
 
 Games are displayed in chronological order. A completed game always uses the same read-only layout for participants and organizers, including an existing team-balance snapshot. For participants it remains visible for 24 hours; organizers can continue to view or delete it manually.
 
-### Lists and payments
+### Lists and optional payments
 
 - The organizer sets the game capacity.
 - Once the main list is full, new players join the waiting list in arrival order.
-- When a main-list player is removed, the first waiting player is promoted automatically as pending.
+- When a main-list player is removed, the first eligible waiting player is promoted automatically.
 - The cost per player is calculated only from the main list; waiting-list players do not change the split.
-- Marking a player as paid also confirms them for the game.
-- The authorized game manager may use the **All paid** checkbox to update every confirmed main-list player at once; waiting-list players remain unchanged.
-- Paid players are grouped at the top of the list while preserving their relative payment order.
-- Manual team generation is available with at least two paid main-list players. A full, fully paid main list generates teams automatically.
+- Payment controls, payment labels, bulk **All paid**, and payment notifications exist only when the game opts into payment tracking. Otherwise the game has no payment UI or payment state.
+- When enabled, the manager may update every confirmed main-list player with **All paid**; waiting-list players remain unchanged. Paid players are grouped at the top while preserving their relative order.
+- If a payment deadline is enabled, every player added to the game receives an individual due instant. An unpaid confirmed player whose due instant passes moves to the waiting list and is not auto-promoted again until paid or manually managed.
+- Manual team generation is available with at least two eligible players: paid confirmed players for payment-controlled games, or any confirmed players for games without payment tracking. It is never generated automatically.
 - A waiting-list player can be included manually in the main list. They take the last pending spot, while the replaced player moves to the waiting list.
 
 ### Languages and interface
@@ -137,26 +137,27 @@ These formats are for UI testing only. Production must use random, revocable ser
 
 | Situation | Behaviour |
 | --- | --- |
-| Main list has space | The player joins as payment pending. |
+| Main list has space | The player joins the confirmed list; payment pending applies only when tracking is enabled. |
 | Main list is full | The player joins the waiting list. |
-| Main-list player is removed | The first waiting player is promoted automatically as pending. |
-| A waiting player is manually included | They replace the last pending main-list player. |
-| Player is marked paid | They are confirmed, move into the paid section, and become eligible for teams. |
+| Main-list player is removed | The first eligible waiting player is promoted automatically. |
+| A waiting player is manually included | They replace the last eligible pending main-list player. |
+| Payment deadline expires | An unpaid confirmed player moves to the waiting list. |
+| Player is marked paid | In a payment-controlled game, they become eligible for teams. |
 | Player is removed from a game | They remain registered in the group directory. |
 | Player is deleted from the directory | They are permanently removed from the group and all game lists. |
 
 ## Team balancing
 
-Only paid players in the confirmed main list enter team balancing; unpaid players and waiting-list players never do. Manual generation needs at least two paid players. When the main list is full and every listed player is paid, PlayMate generates the first available balance automatically.
+Payment-controlled games balance only paid confirmed main-list players; games without payment tracking balance all confirmed main-list players. Waiting-list players are never eligible. Manual generation needs at least two eligible players and is never automatic.
 
-The quota is intentionally small: balancing should be the final preparation step, preferably on game day. A real roster or payment change invalidates the displayed teams and can consume the next available automatic balance, but never resets the quota. A substitute does not rebalance only when the final balance inputs are identical: position, level, mobility, and condition. IDs and list order alone do not affect this comparison. Rescheduling a game recalculates the final-rebalance opening from its new kickoff, but never resets the standard quota or grants another final rebalance. The final attempt opens 15 minutes before kickoff and remains available through the last second of the game; all balancing is disabled when the game ends. If an admin brings the game forward, the early-availability notice identifies that admin; if the final rebalance is used, the same attribution is retained in its history entry. A game cannot be created with a start date/time at or before the current local time.
+The quota is intentionally small: balancing should be the final preparation step, preferably on game day. Roster or eligible-payment changes invalidate the displayed teams but never trigger a balance or restore quota. A substitute preserves the visible teams only when its balance inputs are identical: position, level, mobility, and condition; IDs and list order alone do not affect this comparison. Every game has three manual standard balances. Rescheduling recalculates the final-balance opening from its new kickoff but never resets quota or grants another final balance. The final attempt opens 15 minutes before kickoff and remains available through the last second of the game; all balancing is disabled when the game ends. If an admin brings the game forward, the early-availability notice identifies that admin; if the final balance is used, the same attribution is retained in its history entry. A game cannot be created with a start date/time at or before the current local time.
 
-| Game organizer | Standard balances (automatic/manual combined) | Final window |
+| Game organizer | Standard manual balances | Final window |
 | --- | ---: | --- |
 | Group admin | 3 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
-| Group participant | 2 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
+| Group participant | 3 total | One final manual rebalance opens 15 minutes before kickoff and stays available until the game ends. |
 
-For admin-managed games, the latest balance notice identifies whether it was automatic or triggered by an admin, who triggered it when applicable, and the current count. For participant-organized games, no administrator identity or player attributes are exposed. Each new balance replaces the previous notice and snapshot. The algorithm chooses a different comparably fair player split whenever possible; simply swapping Team A and Team B does not count as a new split.
+For admin-managed games, the latest balance notice identifies the responsible admin and current count. For participant-organized games, no administrator identity or player attributes are exposed. Each new balance replaces the previous notice and snapshot. The algorithm chooses a different comparably fair player split whenever possible; simply swapping Team A and Team B does not count as a new split.
 
 ### Player scores
 

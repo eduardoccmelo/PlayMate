@@ -1652,6 +1652,42 @@ header {
   gap: 12px;
   width: 100%;
 }
+.payment-settings {
+  display: flex;
+  grid-column: span 2;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 4px 0;
+}
+.payment-setting-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #486052;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.payment-setting-checkbox input {
+  width: 16px;
+  min-height: auto;
+  height: 16px;
+  margin: 0;
+  accent-color: #287141;
+}
+.payment-deadline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #526658;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.payment-deadline-select select {
+  width: auto;
+  min-height: 36px;
+  padding: 0 8px;
+}
 .game-form-actions .submit-game {
   min-width: 0;
 }

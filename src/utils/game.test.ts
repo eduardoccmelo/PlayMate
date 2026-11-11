@@ -4,7 +4,9 @@ import {
   durationInMinutes,
   endTimeFromDuration,
   gameEndTimestamp,
+  addPaymentDeadline,
   hasGameEnded,
+  isPaymentOverdue,
   isVisibleToParticipants,
   today,
 } from "./game";
@@ -75,5 +77,23 @@ describe("game time helpers", () => {
     vi.setSystemTime(new Date(2026, 4, 4, 12, 0));
     expect(today()).toBe("2026-05-04");
     vi.useRealTimers();
+  });
+
+  it("sets and evaluates individual payment deadlines only when tracking is enabled", () => {
+    const now = new Date(2026, 9, 10, 10, 0).getTime();
+    const tracked = addPaymentDeadline(
+      game({ paymentTrackingEnabled: true, paymentDeadlineDays: 2 }),
+      7,
+      now,
+    );
+    expect(tracked.paymentDueAtByPlayerId?.[7]).toBe(
+      new Date(2026, 9, 12, 10, 0).toISOString(),
+    );
+    expect(isPaymentOverdue(tracked, 7, now + 2 * 86_400_000 - 1)).toBe(false);
+    expect(isPaymentOverdue(tracked, 7, now + 2 * 86_400_000)).toBe(true);
+    expect(
+      addPaymentDeadline(game({ paymentTrackingEnabled: false, paymentDeadlineDays: 2 }), 7, now)
+        .paymentDueAtByPlayerId,
+    ).toBeUndefined();
   });
 });
