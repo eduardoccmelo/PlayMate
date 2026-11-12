@@ -1,4 +1,4 @@
-import playMateLogo from "../assets/playmate-logo.png";
+import playMateSportsLogo from "../assets/playmatesports-logo.png";
 import { useEffect, useState } from "react";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser } from "../types";
@@ -539,10 +539,11 @@ export function LandingPage({
             </svg>
           </button>
         </div>
-        <div className="brand-lockup" aria-label="PlayMate Sports">
-          <img className="brand-mark" src={playMateLogo} alt="" />
-          <span className="brand-sports" aria-hidden="true">SPORTS</span>
-        </div>
+        <img
+          className="brand-mark"
+          src={playMateSportsLogo}
+          alt="PlayMate Sports"
+        />
       </div>
       <div className="landing-content">
         <section className="landing-hero-copy">

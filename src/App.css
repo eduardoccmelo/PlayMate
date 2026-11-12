@@ -134,9 +134,9 @@ button {
 .profile-modal-heading .form-mode {
   margin: 0;
 }
-.landing-page .brand-lockup {
+.landing-page .brand-mark {
   order: 2;
-  width: 150px;
+  width: 170px;
   margin: 0;
 }
 .landing-hero-copy {
@@ -319,28 +319,12 @@ button {
   padding: 0 24px 60px;
   text-align: center;
 }
-.brand-lockup {
-  position: relative;
+.brand-mark {
   display: block;
   width: min(360px, 78vw);
-  margin: 0 auto 18px;
-}
-.brand-lockup .brand-mark {
-  display: block;
-  width: 100%;
   height: auto;
+  margin: 0 auto 18px;
   object-fit: contain;
-}
-.brand-sports {
-  position: absolute;
-  top: 69%;
-  right: 0.7%;
-  color: #173c2b;
-  font-size: clamp(7px, 1.35vw, 12px);
-  font-weight: 800;
-  letter-spacing: 0.2em;
-  line-height: 1;
-  pointer-events: none;
 }
 .eyebrow {
   font-size: 11px;
