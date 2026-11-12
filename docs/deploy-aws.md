@@ -140,7 +140,7 @@ Verify:
 ```bash
 curl -sI http://example.com  | head -3      # 308 -> https://example.com/
 curl -s  https://example.com/api/health     # {"status":"ok"}
-docker compose logs caddy | grep -i "certificate obtained"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs caddy | grep -i "certificate obtained"
 ```
 
 Renewal is automatic (about 30 days before expiry) as long as the
