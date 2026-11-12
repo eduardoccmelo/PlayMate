@@ -1,11 +1,14 @@
 import logging
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.v1 import auth, games, groups
 from app.core.config import get_settings
+from app.db.session import engine
 from app.domain.errors import DomainError
 from app.domain.teams import TeamDrawError
 
@@ -48,4 +51,20 @@ async def team_draw_error_handler(_: Request, error: TeamDrawError) -> JSONRespo
 
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    """Report ready only when the API can query its configured database.
+
+    This endpoint is used by Docker Compose and the deployment workflow, so a
+    process that started successfully but lost PostgreSQL connectivity must not
+    be considered healthy.
+    """
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as error:
+        logging.getLogger(__name__).exception("Database health check failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="database unavailable",
+        ) from error
+
+    return {"status": "ok", "database": "ok"}

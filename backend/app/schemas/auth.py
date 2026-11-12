@@ -40,7 +40,9 @@ class UpdateMeRequest(CamelModel):
 
 
 class AccessCodeResponse(CamelModel):
-    access_code: str
+    sent: bool
+    #: Development only. Production delivers it through the configured mailer.
+    access_code: str | None = None
 
 
 SessionResponse.model_rebuild()

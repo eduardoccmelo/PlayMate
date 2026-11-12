@@ -10,7 +10,7 @@ internet ──:80──> frontend (nginx) ──/api/*──> backend:8000 ─�
 
 ## 1. Instance
 
-- Ubuntu 24.04 LTS, `t3.small` or larger (the Node build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
+- Ubuntu 24.04 LTS, `t3.small` or larger (the Node 22 build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
 - Security group inbound: **80** (and **443** once TLS is added) from anywhere, **22** from your IP only. Do not open 5432 or 8000.
 - Install Docker Engine + Compose plugin from Docker's repository (the Ubuntu `docker.io` package ships an old Compose):
 
@@ -31,12 +31,33 @@ nano .env
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps           # all three "healthy"
-curl -s http://localhost/api/health   # {"status":"ok"}
+curl -s http://localhost/api/health   # {"status":"ok","database":"ok"}
 ```
 
 The backend runs `alembic upgrade head` on every start, so the schema is
 created on the first boot and upgraded on later ones. The database lives in
 the `playup-db` named volume and survives `down`/`up`.
+
+The health check performs `SELECT 1` against PostgreSQL. A container or
+deployment is therefore unhealthy when its API process is alive but its
+database connection is not.
+
+The frontend is built by Vite, so its `VITE_*` variables are build-time
+inputs. GitHub repository variables `VITE_DATA_SOURCE` and `VITE_DEMO_SEED`
+are written into the deployment `.env` and forwarded as Docker build args.
+Keep them as `browser` and `false` respectively until SMTP and the matching
+groups/games API slices are production-ready.
+
+## 2.1 SMTP for production sign-in
+
+Set GitHub repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`. AWS SES SMTP credentials are supported
+directly. The sender identity must be verified in SES; keep the account in the
+SES sandbox only while all recipient addresses are also verified.
+
+The production API refuses `POST /api/v1/auth/start` with HTTP 503 when SMTP
+is absent, rather than claiming a code was sent. Development continues to
+return the code in the API response for local testing.
 
 **Do not load `db/seed.sql` in production.** It creates demo users and groups
 with placeholder credentials.

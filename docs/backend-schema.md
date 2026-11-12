@@ -66,7 +66,7 @@ create type game_participant_status as enum (
 );
 create type invite_type as enum ('group_admin', 'group_participant', 'game_guest');
 create type game_creator_role as enum ('admin', 'participant');
-create type team_balance_trigger as enum ('automatic', 'organizer', 'late_rebalance');
+create type team_balance_trigger as enum ('organizer', 'late_rebalance');
 create type notification_type as enum (
   'player_joined', 'player_left', 'payment_status_changed'
 );
@@ -115,7 +115,7 @@ create table email_verification_tokens (
 );
 ~~~
 
-Each verification code is single-use and expires after five minutes. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
+Each verification code is single-use and expires after five minutes. The API enforces this against `access_code_updated_at`, locks the user row during verification, and replaces the hash immediately after a successful verification; the browser timer is presentation only and must never be treated as the authority. Production delivers codes through configured SMTP and returns HTTP 503 when delivery is not configured; development may return a code only to support local testing. The invite itself may remain active indefinitely; the token proves control of the email for that one acceptance. Session tokens and verification codes are accepted or returned only in dedicated flows; the database stores hashes only. Display names may repeat between users, but uniqueness within a group and an active game list is mandatory.
 
 ### Groups and memberships
 
@@ -152,6 +152,8 @@ create index group_memberships_user_active_idx
 ~~~
 
 Every group has exactly one active `owner`; additional administrators use role `admin`. The owner is the creator-level role: only that user may delete the group or change its passcode. An admin may rename the group but cannot remove/demote the owner. When an owner leaves, transfer the sole owner role transactionally to the most active remaining member (confirmed participations), then the oldest active membership on a tie. Reject the leave when no successor exists.
+
+The initial database migration is upgraded by `0002_group_owner`: it promotes the recorded creator of every existing group to `owner` and adds the partial unique index that enforces one active owner. A shared join code may create only `admin` or `participant` membership; it can never grant ownership.
 
 Use Argon2id (preferred) or bcrypt for group codes and organizer passcodes. A short, non-sensitive prefix narrows candidates before comparing hashes.
 
@@ -207,7 +209,7 @@ create table player_skill_votes (
 );
 ~~~
 
-Only active admins may vote, including on their own `level` or `mobility`; every active-admin ballot has equal weight. The Admin panel may show the admin's own selected ballot, but game-management lists must still hide that user's final level and mobility. Admins may edit their own position and condition. Votes remain open indefinitely: every valid vote immediately recomputes the average over submitted ballots, rounded half-up, and updates the group player profile. Missing/admin-absent ballots never block team balancing. A later vote changes the aggregate immediately and leaves an audit trail through `updated_at` (or a separate append-only audit table in production).
+Only active admins may vote, including on their own linked profile; every active-admin ballot has equal weight. The player-edit modal and game-management lists must hide the user's own final level and mobility. A player may edit only their own position and condition in that modal, while their own level/mobility ballot may be registered or changed only through the Admin panel. Votes remain open indefinitely: every valid vote immediately recomputes the average over submitted ballots, rounded half-up, and updates the group player profile. Missing/admin-absent ballots never block team balancing. A later vote changes the aggregate immediately and leaves an audit trail through `updated_at` (or a separate append-only audit table in production).
 
 When an active admin manually creates a player, persist `created_by_user_id` and insert that creator's initial level and mobility ballots in the same transaction. A manual player created by a non-admin for a game-only roster remains a guest for that game and must not create a group-wide ballot.
 
@@ -230,6 +232,8 @@ create table games (
   max_players integer not null check (max_players >= 2),
   min_players integer null check (min_players >= 2),
   auto_cancellation_hours integer null check (auto_cancellation_hours > 0),
+  payment_tracking_enabled boolean not null default false,
+  payment_deadline_days smallint null check (payment_deadline_days between 1 and 7),
   payment_info text null,
   player_notice text null,
   status game_status not null default 'active',
@@ -238,6 +242,7 @@ create table games (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (min_players is null or min_players <= max_players),
+  check (payment_tracking_enabled or (payment_deadline_days is null and coalesce(payment_info, '') = '')),
   check (balance_window_starts_at < balance_window_ends_at)
 );
 
@@ -292,6 +297,7 @@ create table game_participants (
   ) stored,
   status game_participant_status not null,
   is_paid boolean not null default false,
+  payment_due_at timestamptz null,
   joined_at timestamptz not null default now(),
   left_at timestamptz null,
   updated_at timestamptz not null default now(),
@@ -306,7 +312,7 @@ create unique index game_participants_active_name_unique_idx
   where status in ('confirmed', 'waiting_list');
 ~~~
 
-Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. A player leaves only their own entry and does so immediately; an admin may remove another player only from game management.
+Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. When `payment_tracking_enabled` and `payment_deadline_days` are set, insert `payment_due_at = now() + deadline` for every new participant. A scheduled worker moves an unpaid confirmed row whose due instant has passed to `waiting_list`; it must not auto-promote an overdue unpaid row back to confirmed. A player leaves only their own entry and does so immediately; an admin may remove another player only from game management. Payment routes and bulk **All paid** are rejected when payment tracking is disabled.
 
 ### Participation statistics
 
@@ -333,7 +339,7 @@ create table game_team_balances (
   trigger_type team_balance_trigger not null,
   triggered_by_user_id uuid null references users(id),
   window_opened_by_schedule_change_id uuid null references game_schedule_changes(id),
-  standard_balance_number smallint null check (standard_balance_number between 1 and 2),
+  standard_balance_number smallint null check (standard_balance_number between 1 and 3),
   algorithm_version text not null,
   team_a_score numeric(8,2) not null,
   team_b_score numeric(8,2) not null,
@@ -341,7 +347,6 @@ create table game_team_balances (
   invalidated_at timestamptz null,
   check (
     (trigger_type = 'organizer' and triggered_by_user_id is not null and standard_balance_number is not null)
-    or (trigger_type = 'automatic' and triggered_by_user_id is null and standard_balance_number is not null)
     or (trigger_type = 'late_rebalance' and triggered_by_user_id is not null and standard_balance_number is null)
   ),
   check (
@@ -364,9 +369,9 @@ create table game_team_balance_members (
 
 ### Team-balancing guard
 
-Only paid confirmed participants are eligible for teams; unpaid and waiting-list entries are always excluded. Manual balancing is available from two paid confirmed participants. When the main list reaches `max_players` and every confirmed participant is paid, generate the next available standard balance automatically.
+When `payment_tracking_enabled` is true, only paid confirmed participants are eligible for teams; when it is false, every confirmed participant is eligible. Waiting-list entries are always excluded. Manual balancing is available from two eligible confirmed participants and is never generated automatically.
 
-The standard quota is determined by `games.created_by_role`: two standard balances for an admin-created game and one for a participant-created game. Automatic and organizer-triggered balances share that quota. Persist the count even if a roster or payment change invalidates a snapshot. Compare a substitution by its balance signature, not its player ID: `position`, effective level, mobility, and condition. Rebalance only when the multiset of these signatures changes; a different person with an identical signature or any list reorder must neither create a snapshot nor consume quota. On creation, persist `balance_window_starts_at = starts_at - interval '15 minutes'` and `balance_window_ends_at = starts_at + duration_minutes * interval '1 minute'`; update both columns atomically when the scheduled date/time or duration is rescheduled. The final rebalance opens at `balance_window_starts_at` and remains available until `balance_window_ends_at`; every balance endpoint rejects a request at or after this end time. This moves the final window but never resets the standard count or changes existing balance records. Once the standard quota is exhausted, allow exactly one `late_rebalance` record only within the current window; it does not increment the standard count. If the active window came from an earlier start, expose the responsible admin in the availability notice and persist that schedule-change ID in `window_opened_by_schedule_change_id` when the final rebalance is used. The button must be disabled outside that window and after a `late_rebalance` record exists for the game. Creation must reject a requested `starts_at <= now()`.
+Every game has three organizer-triggered standard balances regardless of `created_by_role`. Persist the count even if a roster or eligible-payment change invalidates a snapshot; these changes never create or consume a balance. Compare a substitution by its balance signature, not its player ID: `position`, effective level, mobility, and condition. Rebalance only when the multiset of these signatures changes; a different person with an identical signature or any list reorder must neither create a snapshot nor consume quota. On creation, persist `balance_window_starts_at = starts_at - interval '15 minutes'` and `balance_window_ends_at = starts_at + duration_minutes * interval '1 minute'`; `balance_window_ends_at` may therefore fall on the next calendar date when a game crosses local midnight. Update both columns atomically when the scheduled date/time or duration is rescheduled. The final rebalance opens at `balance_window_starts_at` and remains available until `balance_window_ends_at`; every balance endpoint rejects a request at or after this end time. This moves the final window but never resets the standard count or changes existing balance records. Once the standard quota is exhausted, allow exactly one `late_rebalance` record only within the current window; it does not increment the standard count.
 
 Record the triggering user for an organizer-triggered or late rebalance. For admin-created games, expose the latest trigger and standard count to administrators. For participant-created games, the API must not expose admin/player-skill information to the participant organizer. A new snapshot supersedes the active one and must prefer a different comparably fair player split when one exists; merely swapping Team A and Team B is not a new balance.
 
@@ -427,18 +432,19 @@ Every active group admin receives their own recipient row. Dismissing a message 
 6. A group member joins using their linked profile, without approval. A full game places them in the waiting list.
 7. Guests never receive the group directory.
 8. A game code/link requires a verified profile and immediately adds its game-only profile to the main list or waiting list. It never grants group membership or group-directory access.
-9. A game-only user may update only their own payment and remove only their own entry.
+9. A game-only user may update only their own payment when that game has payment tracking enabled, and may remove only their own entry.
 10. Join, leave, and payment changes notify all active group admins.
 11. A participant may update only their own payment state, except while acting as organizer of their own game under rule 4.
 12. Names are unique, ignoring case and repeated spaces, inside each group and active game list.
 13. Changing a group passcode requires the current passcode and does not invalidate existing memberships.
-14. Balancing includes only paid confirmed main-list participants. Standard quota: two balances for an admin-created game, one for a participant-created game; automatic and manual balances share it. One final manual rebalance opens 15 minutes before the current scheduled start and remains available until the current game end. A date/time or duration reschedule moves that window atomically, but roster/payment/date/time changes never reset a quota or create an additional final rebalance. Every balance action must reject a finished game.
+14. Payment-controlled games balance only paid confirmed main-list participants; games without payment tracking balance every confirmed main-list participant. Every game has three manual standard balances and one final manual rebalance that opens 15 minutes before the current scheduled start and remains available until the current game end. A date/time or duration reschedule moves that window atomically, but roster/eligible-payment/date/time changes never reset or consume quota or create an additional final rebalance. Every balance action must reject a finished game.
 15. Finished games are immutable to both admins and participants except for deletion by the authorized owner. Their API representation is read-only and may include the latest valid team-balance snapshot.
-16. Admin skill votes are incremental: each vote recalculates the current level/mobility average; no unanimous or complete quorum is required. Every active admin, including the player, may vote with equal weight. A player never sees their own final level/mobility in game-management lists, although they can register their own ballot in the Admin panel.
+16. Admin skill votes are incremental: each vote recalculates the current level/mobility average; no unanimous or complete quorum is required. Every active admin, including the player, may vote with equal weight from the Admin panel. A player never sees or directly edits their own final level/mobility in the player-edit modal; without a ballot, their defaults are level `3` and mobility `neutro`.
 
 ## Suggested HTTP API
 
 ~~~text
+GET    /health                 # API + database readiness probe
 POST   /v1/auth/start
 POST   /v1/auth/verify
 POST   /v1/me/access-code/regenerate
@@ -467,6 +473,7 @@ POST   /v1/games/:gameId/invites
 POST   /v1/games/join-by-code
 POST   /v1/games/:gameId/participants
 PATCH  /v1/games/:gameId/participants/:participantId/payment
+POST   /v1/games/:gameId/participants/mark-all-paid
 POST   /v1/games/:gameId/participants/:participantId/leave
 DELETE /v1/games/:gameId/participants/:participantId
 POST   /v1/games/:gameId/team-balance
@@ -475,6 +482,11 @@ GET    /v1/me/notifications
 POST   /v1/me/notifications/:notificationId/dismiss
 POST   /v1/me/notifications/dismiss-all
 ~~~
+
+`GET /health` is an operational endpoint, outside the versioned product API.
+It executes a lightweight `SELECT 1` against PostgreSQL and returns
+`{"status":"ok","database":"ok"}` only when both the API and database are
+ready. Database failures return HTTP 503 without exposing connection details.
 
 Group join accepts a code and role. Admin mode also requires the current group passcode. `POST /v1/groups/:groupId/games` is available to any active group member and records `created_by_user_id` plus `created_by_role`. `PATCH`/roster/payment/team routes authorize a group admin for any group game, or the creator for their participant-created game. Game lookup returns public game information only and must not expose the group player directory or player skills to a guest or participant organizer.
 
@@ -537,6 +549,8 @@ Este documento fica em inglês como referência principal de implementação. Re
 - A pessoa pode sair apenas da própria entrada; admin remove outras pessoas pelo gerenciamento.
 - Nomes não podem repetir dentro de um grupo nem de uma lista ativa de jogo.
 - Um participante do grupo pode criar e organizar somente o próprio jogo, sem se tornar admin do grupo. Admin gerencia todos os jogos; organizador participante administra apenas lista, pagamentos, criação de jogadores e times do seu jogo. Atributos técnicos e estatísticas do grupo permanecem ocultos para ele.
-- O balanceamento manual exige pelo menos dois jogadores pagos da lista principal; com lista cheia e todos pagos, os times são gerados automaticamente. Jogadores não pagos e da lista de espera não entram no cálculo. Jogos criados por admin permitem duas gerações regulares; jogos criados por participante permitem uma. Automático e manual compartilham esse limite. Depois há somente um rebalanceamento manual final: ele abre 15 minutos antes do horário vigente e fica disponível até o fim do jogo. Todo endpoint de balanceamento deve recusar jogo encerrado. Remarcar data, horário ou duração desloca essa janela, mas nunca reinicia a cota nem concede outro rebalanceamento final. A remarcação registra horário anterior, novo horário e admin responsável; quando ela antecipa o início, o aviso e o histórico do rebalanceamento final mostram essa autoria. Em uma substituição, a comparação ignora a ID e usa posição, nível efetivo, velocidade e condição: só não há novo balanceamento quando o multiconjunto dessas assinaturas for igual. Novo balanceamento deve mudar a composição quando existir alternativa justa, e não apenas trocar os times de lado. A criação deve recusar `starts_at <= now()`.
+- Com controle de pagamento, o balanceamento manual exige pelo menos dois jogadores pagos e confirmados; sem controle, exige dois confirmados. A espera nunca entra no cálculo e não há geração automática. Todo jogo permite três gerações manuais regulares e um único rebalanceamento final que abre 15 minutos antes do horário vigente e vai até o fim. O prazo opcional de 1–7 dias é persistido individualmente em `payment_due_at`; um confirmado não pago que vence vai para espera e não pode ser promovido automaticamente enquanto estiver vencido. Alterar lista ou elegibilidade invalida o snapshot, mas nunca consome nem reinicia cota. Todo endpoint de balanceamento deve recusar jogo encerrado. A criação deve recusar `starts_at <= now()`.
+
+- A API de votos deve aceitar voto do próprio admin apenas pelo endpoint do Painel do admin; o modal de edição do jogador não pode alterar diretamente nível nem velocidade. Sem votos, os dois atributos usam os padrões `3` e `neutro`.
 - Jogos finalizados são somente leitura para admins e participantes; a API pode exibir o último snapshot válido dos times.
 - O protótipo usa códigos locais previsíveis apenas para teste; o backend deverá usar tokens aleatórios hasheados.

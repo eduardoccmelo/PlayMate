@@ -9,14 +9,6 @@ type PlayerDirectoryManagerProps = {
   currentUser: CurrentUser | null;
   onAddPlayer: (player: Omit<Player, "id">) => boolean;
   onUpdatePlayer: (player: Player) => boolean;
-  /** Own skills are saved as an admin ballot, never as a direct override. */
-  canVoteOwnSkills?: boolean;
-  ownSkillVote?: { level?: number; mobility?: 1 | 2 | 3 };
-  onSaveOwnSkillVote?: (
-    playerId: number,
-    level: number,
-    mobility: Mobility,
-  ) => void;
   onDeletePlayer: (playerId: number) => void;
 };
 
@@ -34,9 +26,6 @@ export function PlayerDirectoryManager({
   currentUser,
   onAddPlayer,
   onUpdatePlayer,
-  canVoteOwnSkills = false,
-  ownSkillVote,
-  onSaveOwnSkillVote,
   onDeletePlayer,
 }: PlayerDirectoryManagerProps) {
   const [mode, setMode] = useState<"add" | "edit" | null>(null);
@@ -45,6 +34,7 @@ export function PlayerDirectoryManager({
   const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const closeModal = () => {
     setMode(null);
@@ -60,8 +50,8 @@ export function PlayerDirectoryManager({
       ? onUpdatePlayer({
           ...editingPlayer,
           ...draft,
-          // Skill fields belong to the ballot below, not a direct profile edit.
-          ...(isSavingOwnPlayer && canVoteOwnSkills
+          // Ratings are always authored by other admins, never by the player.
+          ...(isSavingOwnPlayer
             ? {
                 level: editingPlayer.level,
                 mobility: editingPlayer.mobility,
@@ -74,15 +64,6 @@ export function PlayerDirectoryManager({
       // The only rejection reason today is a duplicate name in the directory.
       setFormError("Esse nome já está na lista.");
       return;
-    }
-
-    if (
-      editingPlayer &&
-      isSavingOwnPlayer &&
-      canVoteOwnSkills &&
-      onSaveOwnSkillVote
-    ) {
-      onSaveOwnSkillVote(editingPlayer.id, draft.level, draft.mobility);
     }
 
     setMessage(
@@ -101,6 +82,12 @@ export function PlayerDirectoryManager({
     if (ownsPlayer(first) !== ownsPlayer(second)) return ownsPlayer(first) ? -1 : 1;
     return first.name.localeCompare(second.name, language === "pt" ? "pt-BR" : "en");
   });
+  const playerSearchTerm = playerSearch.trim().toLocaleLowerCase();
+  const visiblePlayers = sortedPlayers.filter(
+    (player) =>
+      !playerSearchTerm ||
+      player.name.toLocaleLowerCase().includes(playerSearchTerm),
+  );
   const isEditingOwnPlayer = Boolean(editingPlayer && ownsPlayer(editingPlayer));
   return (
     <section className="directory-manager">
@@ -122,9 +109,21 @@ export function PlayerDirectoryManager({
         </button>
       </div>
 
+      {players.length > 0 && (
+        <div className="directory-player-search">
+          <input
+            aria-label={localize("Buscar jogadores", language)}
+            autoComplete="off"
+            onChange={(event) => setPlayerSearch(event.target.value)}
+            placeholder={localize("Buscar jogadores", language)}
+            type="search"
+            value={playerSearch}
+          />
+        </div>
+      )}
       <div className="directory-player-results directory-player-list">
-        {players.length ? (
-          sortedPlayers.map((player) => (
+        {visiblePlayers.length ? (
+          visiblePlayers.map((player) => (
             <div key={player.id}>
               <span>
                 {player.name}
@@ -141,18 +140,8 @@ export function PlayerDirectoryManager({
                   setMessage("");
                   setDraft({
                     name: player.name,
-                    level:
-                      ownsPlayer(player) && ownSkillVote?.level !== undefined
-                        ? ownSkillVote.level
-                        : player.level,
-                    mobility:
-                      ownsPlayer(player) && ownSkillVote?.mobility !== undefined
-                        ? ownSkillVote.mobility === 1
-                          ? "lento"
-                          : ownSkillVote.mobility === 3
-                            ? "rapido"
-                            : "neutro"
-                        : player.mobility,
+                    level: player.level,
+                    mobility: player.mobility,
                     condition: player.condition,
                     position: player.position,
                   });
@@ -172,7 +161,12 @@ export function PlayerDirectoryManager({
           ))
         ) : (
           <p className="empty">
-            {localize("Nenhum jogador cadastrado.", language)}
+            {localize(
+              players.length
+                ? "Nenhum jogador encontrado."
+                : "Nenhum jogador cadastrado.",
+              language,
+            )}
           </p>
         )}
       </div>
@@ -213,14 +207,10 @@ export function PlayerDirectoryManager({
                   setFormError("");
                 }}
               />
-              {(!isEditingOwnPlayer || canVoteOwnSkills) && (
+              {!isEditingOwnPlayer && (
                 <select
                   className="player-form-level"
                   value={draft.level}
-                  disabled={
-                    mode === "edit" &&
-                    !(isEditingOwnPlayer && canVoteOwnSkills)
-                  }
                   onChange={(event) =>
                     setDraft({ ...draft, level: Number(event.target.value) })
                   }
@@ -232,13 +222,9 @@ export function PlayerDirectoryManager({
                   ))}
                 </select>
               )}
-              {(!isEditingOwnPlayer || canVoteOwnSkills) && <select
+              {!isEditingOwnPlayer && <select
                 className="player-form-mobility"
                 value={draft.mobility}
-                disabled={
-                  mode === "edit" &&
-                  !(isEditingOwnPlayer && canVoteOwnSkills)
-                }
                 onChange={(event) =>
                   setDraft({
                     ...draft,

@@ -6,15 +6,18 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FormEvent, ReactNode } from "react";
-import { useLocalStorage } from "../hooks/useLocalStorage";
+import type { FormEvent, ReactNode, SetStateAction } from "react";
+import { useBrowserAppState } from "../hooks/useBrowserAppState";
+import { runtimeConfig } from "../config/runtime";
+import type { SavedProfile } from "../services/browserAppRepository";
+import { apiRepository, type ApiProfile, type ApiSession } from "../services/apiRepository";
+import { ApiError } from "../services/apiClient";
 import {
   generateBalancedTeams,
   playerScoreBreakdown,
 } from "../utils/teamBalancer";
 import type {
   Condition,
-  BalanceHistoryEntry,
   GameSession,
   Mobility,
   Position,
@@ -22,7 +25,6 @@ import type {
   Player,
   PlayerGroup,
   CurrentUser,
-  PlayerSkillVote,
 } from "../types";
 import { localize } from "../i18n";
 import { GameForm } from "./GameForm";
@@ -43,11 +45,33 @@ import {
   endTimeFromDuration,
   emptyGameDraft as emptyGame,
   hasGameEnded,
+  hasPaymentTracking,
+  addPaymentDeadline,
+  isPaymentOverdue,
+  gameTimestamp,
   isVisibleToParticipants as visibleToPlayers,
   pricePerPlayer as price,
-  gameTimestamp,
   normalizeText,
 } from "../utils/game";
+import {
+  MAX_STANDARD_BALANCES,
+  appendBalanceHistory,
+  balanceEligiblePlayerIds,
+  balanceCountOf,
+  hasCurrentTeamRoster,
+  hasEquivalentBalanceRoster,
+  isFinalRebalanceWindow,
+  lockBalanceWindow,
+  preserveEquivalentTeamAssignments,
+  reanchorBalanceWindow,
+  samePlayerSet,
+  standardBalanceLimit,
+} from "../utils/balanceRules";
+import {
+  averageLevel,
+  averageMobility,
+  skillVotesFor,
+} from "../utils/skillVotes";
 import {
   gameInviteCode,
   groupAdminInviteCode,
@@ -71,79 +95,11 @@ const emptyPlayer = {
 const noPlayers: Player[] = [];
 const noGames: GameSession[] = [];
 const noRequests: ParticipationRequest[] = [];
-const isGameReadyForBalancing = (game: GameSession) =>
-  game.playerIds.length === game.maxPlayers &&
-  game.playerIds.every((playerId) => game.paidPlayerIds.includes(playerId));
-const MAX_STANDARD_BALANCES = 2;
-const FINAL_REBALANCE_WINDOW = 15 * 60 * 1000;
-const standardBalanceLimit = (game: GameSession) =>
-  game.createdByRole === "participant" ? 1 : MAX_STANDARD_BALANCES;
-const lockedBalanceWindow = (game: GameSession) => {
-  const scheduledAt = gameTimestamp(game);
-  const startAt = Date.parse(game.balanceWindowStartAt ?? "");
-  return {
-    start: Number.isFinite(startAt) ? startAt : scheduledAt - FINAL_REBALANCE_WINDOW,
-    // The final attempt opens before kickoff but remains possible during play.
-    end: gameTimestamp(game, game.endTime || game.time),
-  };
-};
-const lockBalanceWindow = (game: GameSession): GameSession => {
-  const { start, end } = lockedBalanceWindow(game);
-  if (
-    Date.parse(game.balanceWindowStartAt ?? "") === start &&
-    Date.parse(game.balanceWindowEndAt ?? "") === end
-  ) {
-    return game;
-  }
-  return {
-    ...game,
-    balanceWindowStartAt: new Date(start).toISOString(),
-    balanceWindowEndAt: new Date(end).toISOString(),
-  };
-};
-/** A reschedule changes when the single final balance may be used, never its quota. */
-const reanchorBalanceWindow = (game: GameSession): GameSession => {
-  const scheduledAt = gameTimestamp(game);
-  return {
-    ...game,
-    balanceWindowStartAt: new Date(
-      scheduledAt - FINAL_REBALANCE_WINDOW,
-    ).toISOString(),
-    balanceWindowEndAt: new Date(
-      gameTimestamp(game, game.endTime || game.time),
-    ).toISOString(),
-  };
-};
-const isFinalRebalanceWindow = (game: GameSession, now: number) => {
-  const { start, end } = lockedBalanceWindow(game);
-  return now >= start && now < end;
-};
-const balanceCountOf = (game: GameSession) =>
-  game.balanceCount ?? game.manualRebalanceCount ?? 0;
-const hasCurrentTeamRoster = (game: GameSession) => {
-  if (!game.teams || !isGameReadyForBalancing(game)) return false;
-  const assignedIds = [...game.teams.teamA, ...game.teams.teamB].map(
-    (player) => player.id,
-  );
-  return (
-    assignedIds.length === game.playerIds.length &&
-    new Set(assignedIds).size === assignedIds.length &&
-    assignedIds.every((playerId) => game.playerIds.includes(playerId))
-  );
-};
-const appendBalanceHistory = (game: GameSession, entry: BalanceHistoryEntry) =>
-  [...(game.balanceHistory ?? []), entry].slice(-4);
 const resetPageScroll = () => {
   window.scrollTo(0, 0);
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
   document.scrollingElement?.scrollTo({ left: 0, top: 0, behavior: "auto" });
-};
-type SavedProfile = {
-  user: CurrentUser;
-  groups: PlayerGroup[];
-  /** Composite `groupId:gameId` keys; game ids alone are only unique within a group. */
-  guestGameIds: string[];
 };
 const gameKey = (groupId: string, gameId: number) => `${groupId}:${gameId}`;
 const alphabeticallyByName =
@@ -162,88 +118,6 @@ const nextIdentifier = (
     id: number;
   }[],
 ) => Math.max(0, ...records.map((record) => record.id)) + 1;
-const samePlayerSet = (first: number[], second: number[]) =>
-  first.length === second.length &&
-  first.every((id) => second.includes(id));
-const balanceSignatureFor = (player: Player) => {
-  const score = playerScoreBreakdown(player);
-  return [
-    player.position,
-    score.level,
-    score.mobility,
-    score.condition,
-    score.total,
-  ].join(":");
-};
-/**
- * The player ID is irrelevant to balance quality. A substitute can retain the
- * existing teams only when every balance input is equivalent: position, level,
- * mobility and condition. Keeping the individual inputs matters because the
- * balancer uses mobility and condition as tie breakers even when totals match.
- */
-const hasEquivalentBalanceRoster = (
-  first: number[],
-  second: number[],
-  allPlayers: Player[],
-) => {
-  if (first.length !== second.length) return false;
-  const signaturesFor = (playerIds: number[]) => {
-    const signatures: string[] = [];
-    for (const playerId of playerIds) {
-      const player = allPlayers.find((candidate) => candidate.id === playerId);
-      if (!player) return null;
-      signatures.push(balanceSignatureFor(player));
-    }
-    return signatures.sort();
-  };
-  const firstSignatures = signaturesFor(first);
-  const secondSignatures = signaturesFor(second);
-  return (
-    firstSignatures !== null &&
-    secondSignatures !== null &&
-    firstSignatures.every(
-      (signature, index) => signature === secondSignatures[index],
-    )
-  );
-};
-const preserveEquivalentTeamAssignments = (
-  game: GameSession,
-  allPlayers: Player[],
-): GameSession => {
-  if (!game.teams) return game;
-  const currentPlayers = new Map(
-    game.playerIds
-      .map((playerId) => allPlayers.find((player) => player.id === playerId))
-      .filter((player): player is Player => Boolean(player))
-      .map((player) => [player.id, player]),
-  );
-  const assignedIds = new Set([
-    ...game.teams.teamA.map((player) => player.id),
-    ...game.teams.teamB.map((player) => player.id),
-  ]);
-  const replacements = [...currentPlayers.values()].filter(
-    (player) => !assignedIds.has(player.id),
-  );
-  const replacePlayer = (player: Player) => {
-    const current = currentPlayers.get(player.id);
-    if (current) return current;
-    const replacementIndex = replacements.findIndex(
-      (candidate) =>
-        balanceSignatureFor(candidate) === balanceSignatureFor(player),
-    );
-    return replacementIndex === -1
-      ? player
-      : replacements.splice(replacementIndex, 1)[0];
-  };
-  const teamA = game.teams.teamA.map(replacePlayer);
-  const teamB = game.teams.teamB.map(replacePlayer);
-  const scoreOf = (team: Player[]) =>
-    team.reduce((total, player) => total + playerScoreBreakdown(player).total, 0);
-  return {
-    ...game,
-    teams: { teamA, teamB, sumA: scoreOf(teamA), sumB: scoreOf(teamB) },
-  };
-};
 const paidPlayersFirst = (playerIds: number[], paidPlayerIds: number[]) => [
   ...playerIds.filter((playerId) => paidPlayerIds.includes(playerId)),
   ...playerIds.filter((playerId) => !paidPlayerIds.includes(playerId)),
@@ -274,6 +148,15 @@ const createOwnedPlayer = (players: Player[], user: CurrentUser): Player => ({
   condition: "neutro",
   position: "neutro",
 });
+const currentUserFromApi = (profile: ApiProfile): CurrentUser => ({
+  id: profile.id,
+  displayName: profile.displayName,
+  email: profile.email,
+  emailVerified: true,
+  adminGroupIds: [],
+  devGodMode: false,
+  createdAt: new Date().toISOString(),
+});
 const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
   const existingPlayer =
     group.players.find((player) => player.ownerUserId === user.id) ??
@@ -300,24 +183,6 @@ const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
     player,
   };
 };
-const mobilityFromScore = (score: number): Mobility =>
-  score === 1 ? "lento" : score === 3 ? "rapido" : "neutro";
-const averageLevel = (votes: PlayerSkillVote[], fallback: number) => {
-  const values = votes.flatMap((vote) => (vote.level === undefined ? [] : [vote.level]));
-  return values.length
-    ? Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5)
-    : fallback;
-};
-const averageMobility = (votes: PlayerSkillVote[], fallback: Mobility) => {
-  const values = votes.flatMap((vote) =>
-    vote.mobility === undefined ? [] : [vote.mobility],
-  );
-  return values.length
-    ? mobilityFromScore(
-        Math.floor(values.reduce((total, value) => total + value, 0) / values.length + 0.5),
-      )
-    : fallback;
-};
 const TrashIcon = () => (
   <svg aria-hidden="true" className="trash-icon" viewBox="0 0 24 24">
     <path d="M4 7h16M10 11v6M14 11v6M9 7l1-2h4l1 2M6 7l1 13h10l1-13" />
@@ -331,9 +196,57 @@ const GuestTag = ({ player, language }: { player: Player; language: "pt" | "en" 
   ) : null;
 
 export function PlayMateApp() {
-  const [languagePreference, setLanguage] = useLocalStorage<"pt" | "en" | null>(
-    "playmate.language.preference",
-    null,
+  const [browserState, setBrowserState] = useBrowserAppState();
+  const { languagePreference, groups, currentUser, savedProfiles, activeGroupId } =
+    browserState;
+  const setLanguage = useCallback(
+    (nextLanguage: "pt" | "en" | null) =>
+      setBrowserState((state) => ({ ...state, languagePreference: nextLanguage })),
+    [setBrowserState],
+  );
+  const setGroups = useCallback(
+    (nextGroups: SetStateAction<PlayerGroup[]>) =>
+      setBrowserState((state) => ({
+        ...state,
+        groups:
+          typeof nextGroups === "function"
+            ? nextGroups(state.groups)
+            : nextGroups,
+      })),
+    [setBrowserState],
+  );
+  const setCurrentUser = useCallback(
+    (nextUser: SetStateAction<CurrentUser | null>) =>
+      setBrowserState((state) => ({
+        ...state,
+        currentUser:
+          typeof nextUser === "function"
+            ? nextUser(state.currentUser)
+            : nextUser,
+      })),
+    [setBrowserState],
+  );
+  const setSavedProfiles = useCallback(
+    (nextProfiles: SetStateAction<Record<string, SavedProfile>>) =>
+      setBrowserState((state) => ({
+        ...state,
+        savedProfiles:
+          typeof nextProfiles === "function"
+            ? nextProfiles(state.savedProfiles)
+            : nextProfiles,
+      })),
+    [setBrowserState],
+  );
+  const setActiveGroupId = useCallback(
+    (nextGroupId: SetStateAction<string | null>) =>
+      setBrowserState((state) => ({
+        ...state,
+        activeGroupId:
+          typeof nextGroupId === "function"
+            ? nextGroupId(state.activeGroupId)
+            : nextGroupId,
+      })),
+    [setBrowserState],
   );
   const language = languagePreference ?? browserLanguage();
   const [access, setAccess] = useState<
@@ -346,21 +259,6 @@ export function PlayMateApp() {
     | "admin-panel"
     | "past-games"
   >("home");
-  const [groups, setGroups] = useLocalStorage<PlayerGroup[]>(
-    "playmate.groups.v1",
-    [],
-  );
-  const [currentUser, setCurrentUser] = useLocalStorage<CurrentUser | null>(
-    "playmate.current-user.v1",
-    null,
-  );
-  const [savedProfiles, setSavedProfiles] = useLocalStorage<
-    Record<string, SavedProfile>
-  >("playmate.saved-profiles.v1", {});
-  const [activeGroupId, setActiveGroupId] = useLocalStorage<string | null>(
-    "playmate.active-group.v1",
-    null,
-  );
   const adminGroupIds = currentUser?.adminGroupIds ?? [];
   const activeGroup =
     groups.find((group) => group.id === activeGroupId) ?? null;
@@ -413,7 +311,33 @@ export function PlayMateApp() {
   const [isGameInviteOpen, setIsGameInviteOpen] = useState(false);
   const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
   useEffect(() => {
+    if (runtimeConfig.dataSource !== "api") return;
+    const session = apiRepository.readSession();
+    if (!session) {
+      setCurrentUser(null);
+      return;
+    }
+    let cancelled = false;
+    void apiRepository.currentUser(session.token)
+      .then((profile) => {
+        if (!cancelled) setCurrentUser(currentUserFromApi(profile));
+      })
+      .catch((error: unknown) => {
+        // A timeout or a temporary 5xx must not log a valid user out. Only
+        // the API can tell us that the stored session is no longer valid.
+        if (error instanceof ApiError && [401, 403].includes(error.status)) {
+          apiRepository.clearSession();
+          if (!cancelled) setCurrentUser(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setCurrentUser]);
+  useEffect(() => {
     if (
+      !runtimeConfig.loadDemoSeed ||
+      runtimeConfig.dataSource === "api" ||
       !currentUser ||
       (!currentUser.devGodMode && currentUser.demoSeedVersion === SEED_VERSION)
     )
@@ -655,10 +579,9 @@ export function PlayMateApp() {
   const [playerForm, setPlayerForm] = useState(emptyPlayer);
   const [editPlayer, setEditPlayer] = useState<number | null>(null);
   const [isPlayerFormOpen, setIsPlayerFormOpen] = useState(false);
-  const [playerFormNotice, setPlayerFormNotice] = useState("");
   const [playerFormError, setPlayerFormError] = useState("");
   const [adminPlayerSearch, setAdminPlayerSearch] = useState("");
-  const [isAdminPlayerSearchOpen, setIsAdminPlayerSearchOpen] = useState(false);
+  const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
   const [, setPick] = useState("");
   const [, setEntered] = useState(false);
   const [notice, setNotice] = useState("");
@@ -688,7 +611,9 @@ export function PlayMateApp() {
         !gameSession.cancelled &&
         now >= cancellationDeadline &&
         now < gameTimestamp(gameSession) &&
-        gameSession.paidPlayerIds.length < minimum;
+        (hasPaymentTracking(gameSession)
+          ? gameSession.paidPlayerIds.length
+          : gameSession.playerIds.length) < minimum;
       return shouldCancel
         ? { ...gameSession, cancelled: true, teams: null }
         : gameSession;
@@ -701,8 +626,14 @@ export function PlayMateApp() {
         .map((playerId) => players.find((player) => player.id === playerId))
         .filter((player): player is Player => Boolean(player))
     : [];
+  const paymentTrackingEnabled = Boolean(game && hasPaymentTracking(game));
   const paid = game
     ? listed.filter((p) => game.paidPlayerIds.includes(p.id))
+    : [];
+  const balancePlayers = game
+    ? balanceEligiblePlayerIds(game)
+        .map((playerId) => players.find((player) => player.id === playerId))
+        .filter((player): player is Player => Boolean(player))
     : [];
   const currentBalanceLimit = game
     ? standardBalanceLimit(game)
@@ -723,7 +654,7 @@ export function PlayMateApp() {
         .filter((player): player is Player => Boolean(player))
     : [];
   const adminSearchTerm = adminPlayerSearch.trim().toLocaleLowerCase();
-  const playerSearchResults = isAdminPlayerSearchOpen
+  const playerSearchResults = isPlayerPickerOpen
     ? players
         .filter(
           (player) =>
@@ -734,90 +665,76 @@ export function PlayMateApp() {
     : [];
   const saveGames = (next: GameSession[]) =>
     setGames(next.map(lockBalanceWindow));
+  /** Roster or payment changes invalidate a snapshot, but never rebalance automatically. */
   const refreshTeams = useCallback(
     (gameSession: GameSession, allPlayers = noPlayers): GameSession => {
-      const listedPlayers = gameSession.playerIds
-        .map((playerId) => allPlayers.find((player) => player.id === playerId))
-        .filter((player): player is Player => Boolean(player));
-      const shouldBalanceAutomatically =
-        isGameReadyForBalancing(gameSession) &&
-        listedPlayers.length === gameSession.playerIds.length;
-      const balanceCount = balanceCountOf(gameSession);
-
-      if (
-        shouldBalanceAutomatically &&
-        listedPlayers.length >= 2 &&
-        balanceCount < standardBalanceLimit(gameSession)
-      ) {
-        const nextCount = balanceCount + 1;
-        return {
-          ...gameSession,
-          balanceCount: nextCount,
-          manualRebalanceCount: undefined,
-          balanceHistory: appendBalanceHistory(gameSession, {
-            triggeredAt: new Date().toISOString(),
-            type: "automatic",
-            count: nextCount,
-          }),
-          teams: generateBalancedTeams(listedPlayers, gameSession.teams),
-        };
-      }
-
-      return {
-        ...gameSession,
-        teams: null,
-      };
+      void allPlayers;
+      return { ...gameSession, teams: null };
     },
     [],
   );
-  useEffect(() => {
-    const gamesWithValidTeams = games.map((gameSession) => {
-      if (
-        isGameReadyForBalancing(gameSession) &&
-        !gameSession.teams &&
-        balanceCountOf(gameSession) < standardBalanceLimit(gameSession)
-      )
-        return refreshTeams(gameSession, players);
-      if (gameSession.teams && gameSession.playerIds.length < 2)
-        return { ...gameSession, teams: null };
-      return gameSession;
-    });
-    if (
-      gamesWithValidTeams.some(
-        (gameSession, index) => gameSession !== games[index],
-      )
-    ) {
-      setGames(gamesWithValidTeams);
-    }
-  }, [games, players, refreshTeams, setGames]);
   const fillOpenSpots = useCallback((gameSession: GameSession) => {
-    const playersToPromote = gameSession.waitlistIds.slice(
-      0,
-      Math.max(0, gameSession.maxPlayers - gameSession.playerIds.length),
-    );
+    const playersToPromote = gameSession.waitlistIds
+      .filter((playerId) => !isPaymentOverdue(gameSession, playerId))
+      .slice(
+        0,
+        Math.max(0, gameSession.maxPlayers - gameSession.playerIds.length),
+      );
     return {
       ...gameSession,
       playerIds: [...gameSession.playerIds, ...playersToPromote],
-      waitlistIds: gameSession.waitlistIds.slice(playersToPromote.length),
+      waitlistIds: gameSession.waitlistIds.filter(
+        (playerId) => !playersToPromote.includes(playerId),
+      ),
     };
   }, []);
   useEffect(() => {
     const hasOpenSpotWithWaitingPlayer = games.some(
       (gameSession) =>
         gameSession.playerIds.length < gameSession.maxPlayers &&
-        gameSession.waitlistIds.length > 0,
+        gameSession.waitlistIds.some(
+          (playerId) => !isPaymentOverdue(gameSession, playerId),
+        ),
     );
     if (!hasOpenSpotWithWaitingPlayer) return;
 
     setGames(
       games.map((gameSession) =>
         gameSession.playerIds.length < gameSession.maxPlayers &&
-        gameSession.waitlistIds.length > 0
+        gameSession.waitlistIds.some(
+          (playerId) => !isPaymentOverdue(gameSession, playerId),
+        )
           ? refreshTeams(fillOpenSpots(gameSession), players)
           : gameSession,
       ),
     );
   }, [fillOpenSpots, games, players, refreshTeams, setGames]);
+  useEffect(() => {
+    const nextGames = games.map((gameSession) => {
+      if (!hasPaymentTracking(gameSession) || !gameSession.paymentDeadlineDays)
+        return gameSession;
+      const overduePlayerIds = gameSession.playerIds.filter((playerId) =>
+        isPaymentOverdue(gameSession, playerId, clock),
+      );
+      if (!overduePlayerIds.length) return gameSession;
+      return refreshTeams(
+        fillOpenSpots({
+          ...gameSession,
+          playerIds: gameSession.playerIds.filter(
+            (playerId) => !overduePlayerIds.includes(playerId),
+          ),
+          waitlistIds: [
+            ...gameSession.waitlistIds.filter(
+              (playerId) => !overduePlayerIds.includes(playerId),
+            ),
+            ...overduePlayerIds,
+          ],
+        }),
+      );
+    });
+    if (nextGames.some((entry, index) => entry !== games[index]))
+      setGames(nextGames);
+  }, [clock, fillOpenSpots, games, refreshTeams, setGames]);
   const updateGame = (gameSession: GameSession, shouldRefreshTeams = true) => {
     const previousGame = games.find(
       (storedGame) => storedGame.id === gameSession.id,
@@ -832,9 +749,16 @@ export function PlayMateApp() {
     const playerIdsChanged =
       previousGame !== undefined &&
       !samePlayerSet(previousGame.playerIds, gameSession.playerIds);
+    const balanceRosterChanged =
+      previousGame !== undefined &&
+      !hasEquivalentBalanceRoster(
+        balanceEligiblePlayerIds(previousGame),
+        balanceEligiblePlayerIds(gameSession),
+        players,
+      );
     const refreshedGame =
-      shouldRefreshTeams && playerIdsChanged
-        ? rosterChanged
+      shouldRefreshTeams && (playerIdsChanged || balanceRosterChanged)
+        ? rosterChanged || balanceRosterChanged
           ? refreshTeams(gameSession, players)
           : preserveEquivalentTeamAssignments(gameSession, players)
         : gameSession;
@@ -876,8 +800,7 @@ export function PlayMateApp() {
       !gameForm.time ||
       !gameForm.duration ||
       !gameForm.courtCost ||
-      !gameForm.maxPlayers ||
-      !gameForm.paymentInfo
+      !gameForm.maxPlayers
     ) {
       setGameFormError("Preencha todos os detalhes do jogo.");
       return;
@@ -887,10 +810,6 @@ export function PlayMateApp() {
       return;
     }
     const endTime = endTimeFromDuration(gameForm.time, gameForm.duration);
-    if (!endTime) {
-      setGameFormError("A duração precisa terminar no mesmo dia.");
-      return;
-    }
     if (
       !editGame &&
       new Date(`${gameForm.date}T${gameForm.time}:00`).getTime() <= Date.now()
@@ -917,6 +836,21 @@ export function PlayMateApp() {
       const old = games.find((g) => g.id === editGame)!;
       const active = old.playerIds.slice(0, gameForm.maxPlayers);
       const overflow = old.playerIds.slice(gameForm.maxPlayers);
+      const paymentTrackingEnabled = gameForm.paymentTrackingEnabled;
+      const paymentDeadlineDays = paymentTrackingEnabled
+        ? gameForm.paymentDeadlineDays
+        : null;
+      const paymentDueAtByPlayerId = paymentDeadlineDays
+        ? Object.fromEntries(
+            active.map((playerId) => [
+              playerId,
+              old.paymentDueAtByPlayerId?.[playerId] ??
+                new Date(
+                  Date.now() + paymentDeadlineDays * 86_400_000,
+                ).toISOString(),
+            ]),
+          )
+        : {};
       const nextGame = {
         ...old,
         ...gameForm,
@@ -926,7 +860,13 @@ export function PlayMateApp() {
         maxPlayers: +gameForm.maxPlayers,
         playerIds: active,
         waitlistIds: [...overflow, ...old.waitlistIds],
-        paidPlayerIds: old.paidPlayerIds.filter((x) => active.includes(x)),
+        paymentTrackingEnabled,
+        paymentDeadlineDays,
+        paymentDueAtByPlayerId,
+        paymentInfo: paymentTrackingEnabled ? gameForm.paymentInfo : "",
+        paidPlayerIds: paymentTrackingEnabled
+          ? old.paidPlayerIds.filter((x) => active.includes(x))
+          : [],
       };
       const scheduleChanged =
         nextGame.date !== old.date || nextGame.time !== old.time;
@@ -949,9 +889,14 @@ export function PlayMateApp() {
         old.playerIds,
         players,
       );
+      const balanceRosterChanged = !hasEquivalentBalanceRoster(
+        balanceEligiblePlayerIds(rescheduledGame),
+        balanceEligiblePlayerIds(old),
+        players,
+      );
       // Editing logistics, payment status, capacity without a roster change,
       // or player ordering must never spend a balance.
-      const updatedGame = rosterChanged
+      const updatedGame = rosterChanged || balanceRosterChanged
         ? refreshTeams(rescheduledGame, players)
         : preserveEquivalentTeamAssignments(rescheduledGame, players);
       updateGame(updatedGame, false);
@@ -974,6 +919,11 @@ export function PlayMateApp() {
         minPlayers: null,
         cancellationHours: 2,
         cancelled: false,
+        paymentTrackingEnabled: gameForm.paymentTrackingEnabled,
+        paymentDeadlineDays: gameForm.paymentTrackingEnabled
+          ? gameForm.paymentDeadlineDays
+          : null,
+        paymentDueAtByPlayerId: {},
       });
       saveGames([...games, g]);
       setGameId(g.id);
@@ -1073,10 +1023,13 @@ export function PlayMateApp() {
           editPlayer !== null && g.playerIds.includes(editPlayer);
         const updated =
           isNewPlayer && game && g.id === game.id
-            ? {
-                ...g,
-                waitlistIds: [...g.waitlistIds, next[next.length - 1].id],
-              }
+            ? addPaymentDeadline(
+                {
+                  ...g,
+                  waitlistIds: [...g.waitlistIds, next[next.length - 1].id],
+                },
+                next[next.length - 1].id,
+              )
             : g;
         const filledGame = fillOpenSpots(updated);
         return editedPlayerIsPlaying ||
@@ -1093,11 +1046,6 @@ export function PlayMateApp() {
     setEditPlayer(null);
     setPlayerFormError("");
     setIsPlayerFormOpen(false);
-    setPlayerFormNotice(
-      isNewPlayer
-        ? "Jogador adicionado com sucesso."
-        : "Jogador atualizado com sucesso.",
-    );
   };
   const removePlayerFromGame = (playerId: number) => {
     if (!game) return;
@@ -1150,9 +1098,12 @@ export function PlayMateApp() {
     }
     if (!game.playerIds.includes(pid) && !game.waitlistIds.includes(pid)) {
       updateGame(
-        game.playerIds.length < game.maxPlayers
-          ? { ...game, playerIds: [...game.playerIds, pid] }
-          : { ...game, waitlistIds: [...game.waitlistIds, pid] },
+        addPaymentDeadline(
+          game.playerIds.length < game.maxPlayers
+            ? { ...game, playerIds: [...game.playerIds, pid] }
+            : { ...game, waitlistIds: [...game.waitlistIds, pid] },
+          pid,
+        ),
       );
     }
     setEntered(true);
@@ -1230,7 +1181,7 @@ export function PlayMateApp() {
     );
   };
   const confirmPayment = (playerId: number, isPaid: boolean) => {
-    if (!game) return false;
+    if (!game || !hasPaymentTracking(game)) return false;
     const player = players.find((item) => item.id === playerId);
     if (!player) return false;
     updateGame({
@@ -1425,6 +1376,11 @@ export function PlayMateApp() {
     return null;
   };
   const logout = () => {
+    if (runtimeConfig.dataSource === "api") {
+      const session = apiRepository.readSession();
+      apiRepository.clearSession();
+      if (session) void apiRepository.signOut(session.token).catch(() => undefined);
+    }
     if (currentUser) {
       setSavedProfiles((profiles) => ({
         ...profiles,
@@ -1432,7 +1388,7 @@ export function PlayMateApp() {
       }));
     }
     setCurrentUser(null);
-    setGroups(seedGroups());
+    setGroups(runtimeConfig.loadDemoSeed ? seedGroups() : []);
     setGuestGameIds([]);
     setActiveGroupId(null);
     setGameId(null);
@@ -1449,6 +1405,11 @@ export function PlayMateApp() {
         openProfile={profileRequested}
         onCloseProfile={() => setProfileRequested(false)}
         onSaveUser={saveProfile}
+        onApiSession={(session: ApiSession) => {
+          setCurrentUser(currentUserFromApi(session.user));
+          setGroups([]);
+        }}
+        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => undefined}
@@ -1716,6 +1677,11 @@ export function PlayMateApp() {
         user={currentUser}
         onOpenProfile={() => setProfileRequested(true)}
         onSaveUser={saveProfile}
+        onApiSession={(session: ApiSession) => {
+          setCurrentUser(currentUserFromApi(session.user));
+          setGroups([]);
+        }}
+        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => {
@@ -1804,7 +1770,6 @@ export function PlayMateApp() {
           )
             return "Não é possível criar um jogo em um horário passado.";
           const endTime = endTimeFromDuration(draft.time, draft.duration);
-          if (!endTime) return "A duração precisa terminar no mesmo dia.";
           const newGame = lockBalanceWindow({
             id: nextIdentifier(games),
             ...draft,
@@ -1815,6 +1780,11 @@ export function PlayMateApp() {
             minPlayers: null,
             cancellationHours: 2,
             cancelled: false,
+            paymentTrackingEnabled: draft.paymentTrackingEnabled,
+            paymentDeadlineDays: draft.paymentTrackingEnabled
+              ? draft.paymentDeadlineDays
+              : null,
+            paymentDueAtByPlayerId: {},
             playerIds: [],
             waitlistIds: [],
             paidPlayerIds: [],
@@ -1959,7 +1929,7 @@ export function PlayMateApp() {
               ...(group.skillVotes ?? []).filter((vote) => vote !== previous),
               ...((nextVote.level === undefined && nextVote.mobility === undefined) ? [] : [nextVote]),
             ];
-            const votes = skillVotes.filter((vote) => vote.playerId === playerId);
+            const votes = skillVotesFor({ skillVotes }, playerId);
             const level = averageLevel(votes, player.level);
             const mobility = averageMobility(votes, player.mobility);
             return {
@@ -2086,7 +2056,11 @@ export function PlayMateApp() {
     setKeepGameOpenAfterEdit(keepGameOpen);
     if (!keepGameOpen) setGameId(null);
     setEditGame(gameSession.id);
-    setGameForm({ ...gameSession });
+    setGameForm({
+      ...gameSession,
+      paymentTrackingEnabled: hasPaymentTracking(gameSession),
+      paymentDeadlineDays: gameSession.paymentDeadlineDays ?? null,
+    });
     setGameFormError("");
     setIsGameCreationOpen(true);
   };
@@ -2337,77 +2311,6 @@ export function PlayMateApp() {
           language={language}
           players={players}
           currentUser={currentUser}
-          canVoteOwnSkills={Boolean(
-            currentUser &&
-              activeGroup?.admins?.some(
-                (admin) => admin.userId === currentUser.id,
-              ),
-          )}
-          ownSkillVote={(() => {
-            const ownPlayer = players.find((player) =>
-              isCurrentUserPlayer(player, currentUser),
-            );
-            return ownPlayer
-              ? (activeGroup?.skillVotes ?? []).find(
-                  (vote) =>
-                    vote.playerId === ownPlayer.id &&
-                    vote.adminUserId === currentUser?.id,
-                )
-              : undefined;
-          })()}
-          onSaveOwnSkillVote={(playerId, level, mobility) => {
-            if (!currentUser || !activeGroup) return;
-            const mobilityVote =
-              mobility === "lento" ? 1 : mobility === "rapido" ? 3 : 2;
-            setGroups((currentGroups) =>
-              currentGroups.map((group) => {
-                if (group.id !== activeGroup.id) return group;
-                const player = group.players.find(
-                  (candidate) => candidate.id === playerId,
-                );
-                const actor = (group.admins ?? []).find(
-                  (admin) => admin.userId === currentUser.id,
-                );
-                const isOwnPlayer =
-                  player?.ownerUserId === currentUser.id ||
-                  actor?.playerId === playerId;
-                if (!player || !actor || !isOwnPlayer) return group;
-                const previous = (group.skillVotes ?? []).find(
-                  (vote) =>
-                    vote.playerId === playerId &&
-                    vote.adminUserId === currentUser.id,
-                );
-                const skillVotes = [
-                  ...(group.skillVotes ?? []).filter(
-                    (vote) => vote !== previous,
-                  ),
-                  {
-                    playerId,
-                    adminUserId: currentUser.id,
-                    level,
-                    mobility: mobilityVote as 1 | 2 | 3,
-                    updatedAt: new Date().toISOString(),
-                  },
-                ];
-                const votes = skillVotes.filter(
-                  (vote) => vote.playerId === playerId,
-                );
-                return {
-                  ...group,
-                  skillVotes,
-                  players: group.players.map((candidate) =>
-                    candidate.id !== playerId
-                      ? candidate
-                      : {
-                          ...candidate,
-                          level: averageLevel(votes, candidate.level),
-                          mobility: averageMobility(votes, candidate.mobility),
-                        },
-                  ),
-                };
-              }),
-            );
-          }}
           onAddPlayer={(player) => {
             if (
               players.some(
@@ -2481,6 +2384,12 @@ export function PlayMateApp() {
               player.id === updatedPlayer.id
                 ? {
                     ...updatedPlayer,
+                    ...(isCurrentUserPlayer(player, currentUser)
+                      ? {
+                          level: player.level,
+                          mobility: player.mobility,
+                        }
+                      : {}),
                     ownerUserId:
                       player.ownerUserId ??
                       (currentUser &&
@@ -2522,10 +2431,12 @@ export function PlayMateApp() {
               <strong>{game.waitlistIds.length}</strong>
               <span>{localize("lista de espera", language)}</span>
             </div>
-            <div>
-              <strong>{paid.length}</strong>
-              <span>{localize("pagos / confirmados", language)}</span>
-            </div>
+            {paymentTrackingEnabled && (
+              <div>
+                <strong>{paid.length}</strong>
+                <span>{localize("pagos / confirmados", language)}</span>
+              </div>
+            )}
             <div>
               <strong>
                 {currencySymbol(game.currency)} {price(game).toFixed(2)}
@@ -2538,84 +2449,53 @@ export function PlayMateApp() {
               <div className="panel-heading">
                 <h2>
                   {localize("Participantes", language)}: {game.playerIds.length}
-                  /{game.maxPlayers} ({paid.length}{" "}
-                  {localize("pagos", language)})
+                  /{game.maxPlayers}
+                  {paymentTrackingEnabled && (
+                    <> ({paid.length} {localize("pagos", language)})</>
+                  )}
                 </h2>
               </div>
               <div className="admin-player-search">
-                <div className="admin-player-search-controls">
-                  <input
-                    value={adminPlayerSearch}
-                    placeholder={localize("Buscar jogadores", language)}
-                    autoComplete="off"
-                    onFocus={() => setIsAdminPlayerSearchOpen(true)}
-                    onBlur={() =>
-                      window.setTimeout(
-                        () => setIsAdminPlayerSearchOpen(false),
-                        150,
-                      )
-                    }
-                    onChange={(e) => setAdminPlayerSearch(e.target.value)}
-                  />
-                  <button
-                    className="primary"
-                    onClick={() => {
-                      setEditPlayer(null);
-                      setPlayerForm(emptyPlayer);
-                      setPlayerFormNotice("");
-                      setPlayerFormError("");
-                      setIsPlayerFormOpen(true);
-                    }}
-                  >
-                    {localize("+ Criar jogador", language)}
-                  </button>
-                </div>
-                {playerSearchResults.length > 0 && (
-                  <div className="admin-player-search-results">
-                    {playerSearchResults.map((player) => {
-                      const isListed = game.playerIds.includes(player.id);
-                      const isWaiting = game.waitlistIds.includes(player.id);
-
-                      return (
-                        <div key={player.id}>
-                          <span>
-                            {player.name}
-                            <GuestTag player={player} language={language} />
-                            {isCurrentUserPlayer(player, currentUser) &&
-                              ` (${localize("você", language)})`}
-                          </span>
-                          {isListed ? (
-                            <small>{localize("na lista", language)}</small>
-                          ) : isWaiting ? (
-                            <small>
-                              {localize("na lista de espera", language)}
-                            </small>
-                          ) : (
-                            <button
-                              className="text-button"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() =>
-                                addPlayerToGame(game, player.id, updateGame)
-                              }
-                            >
-                              {localize("Adicionar", language)}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {playerFormNotice && (
-                  <p className="success directory-message">
-                    ✓ {localize(playerFormNotice, language)}
-                  </p>
-                )}
+                <button
+                  className="primary player-picker-button"
+                  onClick={() => {
+                    setAdminPlayerSearch("");
+                    setIsPlayerPickerOpen(true);
+                  }}
+                  type="button"
+                >
+                  {localize("+ Adicionar jogadores", language)}
+                </button>
               </div>
+              {game.playerIds.length > 0 && (
+                <div className="player-list-header">
+                  <span>{localize("Nome", language)}</span>
+                  {paymentTrackingEnabled && <label className="payment-checkbox">
+                    <input
+                      aria-label={localize("Marcar todos como pagos", language)}
+                      checked={game.playerIds.every((playerId) =>
+                        game.paidPlayerIds.includes(playerId),
+                      )}
+                      onChange={(event) => {
+                        const paidIds = event.target.checked
+                          ? [...game.playerIds]
+                          : [];
+                        updateGame({
+                          ...game,
+                          paidPlayerIds: paidIds,
+                          playerIds: paidPlayersFirst(game.playerIds, paidIds),
+                        });
+                      }}
+                      type="checkbox"
+                    />
+                    <span>{localize("Todos pagos", language)}</span>
+                  </label>}
+                </div>
+              )}
               <section className="player-list">
                 {listed.map((p) => {
                   const score = playerScoreBreakdown(p);
-                  const isPaid = game.paidPlayerIds.includes(p.id);
+                  const isPaid = paymentTrackingEnabled && game.paidPlayerIds.includes(p.id);
                   const isOwnPlayer = isCurrentUserPlayer(p, currentUser);
                   const scoreLabel = `${score.level.toFixed(2)} ${score.mobility >= 0 ? "+" : ""}${score.mobility.toFixed(2)} ${score.condition >= 0 ? "+" : ""}${score.condition.toFixed(2)} = ${score.total.toFixed(2)}`;
 
@@ -2628,7 +2508,7 @@ export function PlayMateApp() {
                         <strong>
                           {p.name}
                           <GuestTag player={p} language={language} />
-                          <span
+                          {paymentTrackingEnabled && <span
                             aria-label={localize(
                               isPaid ? "Pago" : "Pendente",
                               language,
@@ -2636,7 +2516,7 @@ export function PlayMateApp() {
                             className={`player-payment-mark ${isPaid ? "paid" : "pending"}`}
                           >
                             {isPaid ? "✓" : "×"}
-                          </span>
+                          </span>}
                         </strong>
                         {!isParticipantGameManager && (
                           <span>
@@ -2673,7 +2553,7 @@ export function PlayMateApp() {
                       </div>
                       <div className="player-row-actions">
                         {game.playerIds.includes(p.id) ? (
-                          <label className="payment-checkbox">
+                          paymentTrackingEnabled ? <label className="payment-checkbox">
                             <input
                               checked={isPaid}
                               onChange={() => {
@@ -2692,7 +2572,7 @@ export function PlayMateApp() {
                               type="checkbox"
                             />
                             <span>{localize("Pago", language)}</span>
-                          </label>
+                          </label> : null
                         ) : game.waitlistIds.includes(p.id) ? (
                           <button
                             aria-label={localize(
@@ -2875,10 +2755,10 @@ export function PlayMateApp() {
               <section className="teams-section team-balance-panel">
                 <p className="balance-info-box">
                   {localize(
-                    "Deixe o balanceamento como etapa final, de preferência no dia do jogo. Com a lista completa e todos pagos, os times são gerados automaticamente.",
+                    "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.",
                     language,
                   )}{" "}
-                  {localize("Atual", language)}: ({paid.length}/
+                  {localize("Atual", language)}: ({balancePlayers.length}/
                   {game.maxPlayers})
                 </p>
                 {!isParticipantGameManager && !isFinalBalanceAvailable ? (
@@ -2892,9 +2772,7 @@ export function PlayMateApp() {
                           ? language === "pt"
                             ? `Balanceamento disparado por ${latestBalance.adminName}. Balanceamento: ${latestBalance.count} de ${currentBalanceLimit}.`
                             : `Balance triggered by ${latestBalance.adminName}. Balance: ${latestBalance.count} of ${currentBalanceLimit}.`
-                          : language === "pt"
-                            ? `Balanceamento automático acionado pelo sistema. Balanceamento: ${latestBalance.count} de ${currentBalanceLimit}.`
-                            : `Balance triggered automatically by the system. Balance: ${latestBalance.count} of ${currentBalanceLimit}.`
+                          : `${localize("Balanceamentos", language)}: ${latestBalance.count ?? balanceCountOf(game)} ${localize("de", language)} ${currentBalanceLimit}`
                       : `${localize("Balanceamentos", language)}: ${balanceCountOf(game)} ${localize("de", language)} ${currentBalanceLimit}`}
                   </p>
                 ) : balanceCountOf(game) < currentBalanceLimit ? (
@@ -2909,7 +2787,7 @@ export function PlayMateApp() {
                   !game.lateRebalanceUsed && (
                     <p className="balance-availability balance-limit-notice">
                       {localize(
-                        "O limite de 1 rebalanceamento foi atingido. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.",
+                        "Os balanceamentos regulares foram utilizados. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.",
                         language,
                       )}
                     </p>
@@ -2938,16 +2816,18 @@ export function PlayMateApp() {
                   className="primary team-balance-button"
                   disabled={!canBalance}
                   onClick={() => {
-                    if (paid.length < 2) {
+                    if (balancePlayers.length < 2) {
                       setBalanceNotice(
                         localize(
-                          "Marque pelo menos 2 jogadores como pagos para gerar os times.",
+                          paymentTrackingEnabled
+                            ? "Marque pelo menos 2 jogadores como pagos para gerar os times."
+                            : "Adicione pelo menos 2 jogadores à lista para gerar os times.",
                           language,
                         ),
                       );
                       return;
                     }
-                    const teams = generateBalancedTeams(paid, game.teams);
+                    const teams = generateBalancedTeams(balancePlayers, game.teams);
                     const isLateRebalance =
                       balanceCountOf(game) >= currentBalanceLimit;
                     const nextBalanceCount = isLateRebalance
@@ -3005,6 +2885,90 @@ export function PlayMateApp() {
           </div>
         </fieldset>
       ) : null}
+      {game && isPlayerPickerOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="player-picker-title"
+            aria-modal="true"
+            className="confirm-dialog player-picker-modal"
+            role="dialog"
+          >
+            <p className="form-mode" id="player-picker-title">
+              {localize("Adicionar jogadores", language)}
+            </p>
+            <div className="player-picker-controls">
+              <input
+                aria-label={localize("Buscar jogadores", language)}
+                autoComplete="off"
+                autoFocus
+                onChange={(event) => setAdminPlayerSearch(event.target.value)}
+                placeholder={localize("Buscar jogadores", language)}
+                value={adminPlayerSearch}
+              />
+              <button
+                className="primary"
+                onClick={() => {
+                  setIsPlayerPickerOpen(false);
+                  setEditPlayer(null);
+                  setPlayerForm(emptyPlayer);
+                  setPlayerFormError("");
+                  setIsPlayerFormOpen(true);
+                }}
+                type="button"
+              >
+                {localize("+ Criar jogador", language)}
+              </button>
+            </div>
+            <div className="player-picker-results">
+              {playerSearchResults.length ? (
+                playerSearchResults.map((player) => {
+                  const isListed = game.playerIds.includes(player.id);
+                  const isWaiting = game.waitlistIds.includes(player.id);
+
+                  return (
+                    <div key={player.id}>
+                      <span>
+                        {player.name}
+                        <GuestTag player={player} language={language} />
+                        {isCurrentUserPlayer(player, currentUser) &&
+                          ` (${localize("você", language)})`}
+                      </span>
+                      {isListed ? (
+                        <small>{localize("na lista", language)}</small>
+                      ) : isWaiting ? (
+                        <small>{localize("na lista de espera", language)}</small>
+                      ) : (
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            addPlayerToGame(game, player.id, updateGame)
+                          }
+                          type="button"
+                        >
+                          {localize("Adicionar", language)}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="empty">
+                  {localize("Nenhum jogador cadastrado.", language)}
+                </p>
+              )}
+            </div>
+            <div className="confirm-dialog-actions">
+              <button
+                className="secondary"
+                onClick={() => setIsPlayerPickerOpen(false)}
+                type="button"
+              >
+                {localize("Fechar", language)}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {game && isPlayerFormOpen && (
         <div className="modal-backdrop" role="presentation">
           <section
@@ -3286,6 +3250,7 @@ function PlayerView({
     backToGameSelection();
   };
   const isViewingGame = Boolean(game && isGameListOpen);
+  const paymentTrackingEnabled = Boolean(game && hasPaymentTracking(game));
   const paidPlayersCount =
     game?.playerIds.filter((playerId) => game.paidPlayerIds.includes(playerId))
       .length ?? 0;
@@ -3321,12 +3286,14 @@ function PlayerView({
             <>
               <h2>
                 {localize("Participantes", language)}: {game.playerIds.length}/
-                {game.maxPlayers} ({paidPlayersCount}{" "}
-                {localize("pagos", language)})
+                {game.maxPlayers}
+                {paymentTrackingEnabled && (
+                  <> ({paidPlayersCount} {localize("pagos", language)})</>
+                )}
               </h2>
               {game.playerIds.map((x, index) => (
                 <div
-                  className={`readonly-row ${game.paidPlayerIds.includes(x) ? "is-paid" : ""}`}
+                  className={`readonly-row ${paymentTrackingEnabled && game.paidPlayerIds.includes(x) ? "is-paid" : ""}`}
                   key={x}
                 >
                   <span className="readonly-player-name">
@@ -3346,7 +3313,7 @@ function PlayerView({
                     {isCurrentUserPlayer(
                       players.find((p) => p.id === x),
                       user,
-                    ) && (
+                    ) && paymentTrackingEnabled && (
                       <>
                         <label className="readonly-payment-confirmation">
                           <input
@@ -3366,7 +3333,18 @@ function PlayerView({
                         </button>
                       </>
                     )}
-                    <span
+                    {isCurrentUserPlayer(
+                      players.find((p) => p.id === x),
+                      user,
+                    ) && !paymentTrackingEnabled && (
+                      <button
+                        className="text-button"
+                        onClick={() => setActiveAction("leave")}
+                      >
+                        {localize("Sair da lista", language)}
+                      </button>
+                    )}
+                    {paymentTrackingEnabled && <span
                       aria-label={localize(
                         game.paidPlayerIds.includes(x) ? "Pago" : "Pendente",
                         language,
@@ -3374,7 +3352,7 @@ function PlayerView({
                       className={`readonly-payment-mark ${game.paidPlayerIds.includes(x) ? "paid" : "pending"}`}
                     >
                       {game.paidPlayerIds.includes(x) ? "✓" : "×"}
-                    </span>
+                    </span>}
                   </span>
                 </div>
               ))}
@@ -3707,9 +3685,12 @@ function addPlayerToGame(
   saveGame: (gameSession: GameSession) => void,
 ) {
   saveGame(
-    gameSession.playerIds.length < gameSession.maxPlayers
-      ? { ...gameSession, playerIds: [...gameSession.playerIds, playerId] }
-      : { ...gameSession, waitlistIds: [...gameSession.waitlistIds, playerId] },
+    addPaymentDeadline(
+      gameSession.playerIds.length < gameSession.maxPlayers
+        ? { ...gameSession, playerIds: [...gameSession.playerIds, playerId] }
+        : { ...gameSession, waitlistIds: [...gameSession.waitlistIds, playerId] },
+      playerId,
+    ),
   );
 }
 function promoteWaitlistedPlayer(

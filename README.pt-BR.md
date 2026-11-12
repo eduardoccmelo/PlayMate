@@ -4,7 +4,7 @@
 
 PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
 
-> O projeto está atualmente em modo MVP. Dados, permissões e recuperação de perfil são simulados no navegador. As telas de e-mail/código de acesso geram um código local de demonstração, de uso único e com validade de cinco minutos; ainda não há backend, envio real de e-mail, autenticação real nem sincronização entre dispositivos.
+> O projeto está em uma transição de MVP por etapas. O backend em PostgreSQL/FastAPI já está publicado e o endpoint `/api/health` verifica a conectividade com o banco, mas a interface liberada ainda guarda seus dados e o login de demonstração localmente no navegador. Envio real de e-mail, autenticação no servidor e sincronização entre dispositivos ainda não estão habilitados na interface.
 
 ## Índice
 
@@ -42,9 +42,9 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - Exclusão de um jogador do cadastro geral, com confirmação.
 - Consulta e dispensa de notificações de alteração de pagamento.
 - Inclusão e remoção de jogadores da lista de cada jogo.
-- Controle de pagamento por checkbox.
+- Configuração de controle de pagamento e de prazo individual opcional por jogo.
 - Estatísticas do grupo: total de jogos, jogos ativos e participações de cada jogador em jogos concluídos.
-- Geração de times apenas com jogadores pagos da lista principal. Lista completa e totalmente paga gera times automaticamente; os limites dependem de o jogo ser de admin ou de organizador participante.
+- Geração manual de times: todo jogo possui três tentativas regulares e uma final liberada 15 minutos antes do início.
 - Visualização dos pontos de balanceamento de cada jogador, exclusiva do painel administrativo.
 
 ### Governança dos admins e notas dos jogadores
@@ -54,7 +54,7 @@ PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um 
 - O criador não pode ser removido. Se sair, a hierarquia passa para o membro restante com mais participações confirmadas; em empate, para a associação mais antiga. Sem sucessor elegível, o criador não pode sair.
 - Criar ou entrar em um grupo cria ou vincula imediatamente o jogador do próprio membro naquele grupo. Portanto, quem cria o grupo já começa com o papel de criador e um perfil jogável.
 - Os admins registram votos independentes para nível `1–5` e velocidade `1–3`. A média atual é aplicada imediatamente, com arredondamento de `.5` para cima; votos ausentes não bloqueiam o balanceamento.
-- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê seu nível/velocidade finais nas listas de gerenciamento do jogo, mas pode registrar ou mudar o próprio voto no Painel do admin; posição e condição continuam editáveis pelo próprio jogador.
+- Todo admin vota em todos os jogadores do grupo, inclusive em si. Cada voto tem o mesmo peso na média aplicada imediatamente, com arredondamento de `.5` para cima. A pessoa não vê nem altera seu nível/velocidade no modal de editar jogador; esse voto só pode ser registrado ou alterado no Painel do admin. Posição e condição continuam editáveis pelo próprio jogador.
 
 ### Participantes, organizadores de jogos e guests
 
@@ -77,25 +77,26 @@ Cada jogo possui:
 - local;
 - data e dia da semana calculado automaticamente;
 - horário de início;
-- duração entre 45 minutos e 3 horas, em intervalos de 15 minutos;
+- duração entre 45 minutos e 3 horas, em intervalos de 15 minutos, inclusive atravessando a meia-noite local;
 - horário de término calculado automaticamente;
 - custo da quadra e moeda (`EUR`, `USD`, `GBP` ou `BRL`);
 - número máximo de jogadores;
 - número da quadra opcional;
-- informações de pagamento;
+- controle de pagamento opcional, informações de pagamento opcionais e prazo de `1–7` dias por jogador;
 - aviso opcional aos participantes, com até 100 caracteres.
 
 Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo layout somente leitura para participantes e admins, inclusive com os times já gerados. Para participantes, permanece visível por até 24 horas; admins continuam podendo visualizá-lo ou excluí-lo manualmente.
 
-### Listas e pagamentos
+### Listas e pagamentos opcionais
 
 - A capacidade do jogo é definida pelo organizador.
 - Quando a lista principal está cheia, novos participantes entram na lista de espera, em ordem de chegada.
-- Ao remover alguém da lista principal, a primeira pessoa da espera é promovida automaticamente como pendente.
+- Ao remover alguém da lista principal, a primeira pessoa elegível da espera é promovida automaticamente.
 - O valor por pessoa é calculado usando somente os jogadores da lista principal; a lista de espera não altera a divisão do custo.
-- Marcar um jogador como pago também o confirma para o jogo.
-- Jogadores pagos ficam agrupados no topo da lista, preservando a ordem entre os já pagos.
-- A geração manual de times fica disponível com pelo menos dois jogadores pagos da lista principal. Com lista completa e todos pagos, os times são gerados automaticamente.
+- Controle, rótulos e notificações de pagamento, inclusive **Todos pagos**, existem somente quando o jogo opta por controlar pagamentos. Sem essa opção, o jogo não possui UI nem estado de pagamento.
+- Quando habilitado, o organizador pode atualizar de uma vez todos os jogadores confirmados da lista principal; jogadores da espera não são alterados. Pagos ficam no topo, preservando a ordem entre eles.
+- Com prazo habilitado, cada jogador adicionado recebe seu próprio vencimento. Se continuar sem pagamento ao vencer, sai automaticamente da lista principal e vai para a espera; não volta automaticamente até pagar ou ser gerenciado manualmente.
+- A geração manual de times exige ao menos dois jogadores elegíveis: pagos na lista principal em jogos com controle de pagamento, ou qualquer jogador confirmado em jogos sem esse controle. Nunca há geração automática.
 - Um jogador da lista de espera pode ser incluído manualmente na lista principal. Ele ocupa a última vaga pendente, e o jogador substituído passa para a lista de espera.
 
 ### Idiomas e interface
@@ -136,9 +137,10 @@ Esses códigos servem somente para testar a interface. Em produção, devem ser 
 
 | Situação | Comportamento |
 | --- | --- |
-| Lista principal com vaga | O jogador entra como pendente de pagamento. |
+| Lista principal com vaga | O jogador entra confirmado; fica pendente somente quando houver controle de pagamento. |
 | Lista principal cheia | O jogador entra na lista de espera. |
-| Jogador principal removido | A primeira pessoa da espera sobe automaticamente como pendente. |
+| Jogador principal removido | A primeira pessoa elegível da espera sobe automaticamente. |
+| Prazo de pagamento vence | Jogador confirmado sem pagamento vai para a espera. |
 | Jogador da espera incluído manualmente | Troca com a última pessoa pendente da lista principal. |
 | Jogador marcado como pago | Fica confirmado, sobe para a área de pagos e passa a ser elegível aos times. |
 | Jogador removido da lista do jogo | Continua no cadastro geral do grupo. |
@@ -146,14 +148,14 @@ Esses códigos servem somente para testar a interface. Em produção, devem ser 
 
 ## Balanceamento dos times
 
-Somente jogadores pagos na lista principal entram no balanceamento; jogadores não pagos e da lista de espera nunca entram. A geração manual exige pelo menos dois jogadores pagos. Quando a lista principal está completa e todos estão pagos, o PlayMate gera automaticamente o primeiro balanceamento disponível.
+Em jogos com controle de pagamento, somente jogadores pagos e confirmados entram no balanceamento; sem esse controle, todos os confirmados entram. A lista de espera nunca entra no cálculo. A geração manual exige pelo menos dois jogadores elegíveis e nunca acontece automaticamente.
 
-O limite é propositalmente pequeno: o balanceamento deve ser a etapa final da preparação, de preferência no dia do jogo. Uma mudança real na lista ou no pagamento invalida os times exibidos e pode consumir o próximo balanceamento automático disponível, mas nunca reinicia o limite. Uma substituição só não recalcula quando os atributos finais de balanceamento forem idênticos: posição, nível, velocidade e condição. A ID e a ordem na lista não interferem nessa comparação. Ao remarcar o jogo, a abertura da janela final é recalculada a partir do novo horário, mas a cota normal e o único rebalanceamento final nunca são reiniciados. A última tentativa abre 15 minutos antes do início e permanece disponível até o último segundo do jogo; todo balanceamento é desativado quando ele termina. Quando um admin antecipa o jogo, o aviso de disponibilidade mostra quem fez a alteração; se o rebalanceamento final for usado, essa autoria também fica registrada no histórico. Não é possível criar um jogo com data/hora de início igual ou anterior ao horário local atual.
+O balanceamento deve ser a etapa final da preparação. Mudanças na lista ou no estado elegível invalidam os times, mas nunca disparam outro balanceamento nem reiniciam cotas. Cada jogo possui três tentativas manuais regulares. A última tentativa abre 15 minutos antes do início e permanece disponível até o fim do jogo; todo balanceamento fica desativado depois disso. Ao remarcar, a janela final é recalculada, sem criar uma nova tentativa. Não é possível criar um jogo com data/hora de início igual ou anterior ao horário local atual.
 
-| Responsável pelo jogo | Balanceamentos regulares (automático/manual combinados) | Janela final |
+| Responsável pelo jogo | Balanceamentos manuais regulares | Janela final |
 | --- | ---: | --- |
-| Admin do grupo | 2 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
-| Participante do grupo | 1 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
+| Admin do grupo | 3 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
+| Participante do grupo | 3 no total | Um rebalanceamento manual final abre 15 minutos antes do início e fica disponível até o fim do jogo. |
 
 Nos jogos gerenciados por admin, o último aviso informa se o balanceamento foi automático ou disparado por admin, identifica o responsável quando aplicável e mostra a contagem. Em jogos criados por participante, nenhum nome de admin nem atributo de jogador é exibido. Cada novo balanceamento substitui o aviso e o snapshot anterior. Sempre que houver alternativa justa, o algoritmo escolhe uma composição diferente; apenas inverter Time A e Time B não conta como nova divisão.
 
@@ -200,13 +202,14 @@ Todos os novos jogadores começam com os valores padrão: nível 3, velocidade n
 - [TypeScript](https://www.typescriptlang.org/)
 - [Vite](https://vite.dev/)
 - CSS nativo responsivo
-- `localStorage` do navegador para persistência local
+- `localStorage` do navegador para a persistência atual da interface
+- FastAPI + PostgreSQL para a API e infraestrutura de produção
 
 ## Como executar localmente
 
 ### Pré-requisitos
 
-- [Node.js](https://nodejs.org/) 20 ou superior
+- [Node.js](https://nodejs.org/) 22 ou superior
 - npm 10 ou superior
 
 ### Instalação
@@ -240,6 +243,7 @@ npm run preview
 | `npm run build` | Verifica os tipos TypeScript e cria o build de produção em `dist/`. |
 | `npm run preview` | Servidor local para visualizar o build de produção. |
 | `npm run lint` | Executa a análise estática do código com ESLint. |
+| `npm test` | Executa a suíte Vitest das regras determinísticas do front e do cliente de API. |
 
 ## Estrutura do projeto
 
@@ -277,11 +281,11 @@ Os dados são salvos apenas no `localStorage` do navegador. Isso significa que:
 - os códigos são validados somente contra dados locais e seedados;
 - o fluxo de perfil/e-mail/código é uma simulação local: não há contas reais, envio de e-mail, recuperação de código, permissões aplicadas pelo servidor nem auditoria.
 
-O modelo planejado de backend, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
+A API de backend está publicada separadamente da interface que ainda é local. `GET /api/health` só retorna sucesso após executar uma consulta ao banco; é uma verificação de prontidão da infraestrutura, não a confirmação de que todos os fluxos do produto já usam a API. O app do navegador agora concentra seu estado persistido em `browserAppRepository`, enquanto `apiRepository` contém contratos tipados de health e identidade. `VITE_DATA_SOURCE=api` habilita a fatia isolada de login (solicitar código, validá-lo, restaurar/revogar sessão e alterar nome); não a habilite publicamente antes da configuração de SMTP. Em produção, o código é enviado por SMTP; sem envio configurado, a API retorna HTTP 503. Os códigos têm oito caracteres alfanuméricos em maiúsculas, expiram no servidor após cinco minutos e são consumidos na primeira validação bem-sucedida. Grupos/jogos continuam no navegador até a fatia de API correspondente existir. O modelo de dados, permissões, API, recuperação de perfil e convites seguros está em [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Próximos passos sugeridos
 
-- Implementar o backend e banco descritos em [docs/backend-schema.md](docs/backend-schema.md).
+- Conectar a interface ao backend existente em fatias verticais, começando por identidade e modelos de leitura de grupos/jogos.
 - Recuperação de perfil por e-mail com regeneração do código de acesso.
 - Links seguros e compartilháveis para grupos e jogos.
 - Integração de pagamento e confirmação automática.
