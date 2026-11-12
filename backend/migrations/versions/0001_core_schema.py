@@ -1,4 +1,4 @@
-"""Create the PlayUp core schema.
+"""Create the PlayMate Sports core schema.
 
 This migration is the single source of truth for the PostgreSQL schema:
 extensions, enum types, tables, CHECK constraints, partial indexes, the

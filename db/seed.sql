@@ -1,11 +1,11 @@
--- Development data mirrored from PlayUp/src/dev/seeds.ts.
+-- Development data mirrored from PlayMate Sports/src/dev/seeds.ts.
 -- Development only. Apply by hand after the migrations have run
 -- (see db/README.md); never load it into a production database.
 
 INSERT INTO users (id, display_name, email, email_verified_at, access_code_hash)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'PlayUp Seed Admin',
+  'PlayMate Sports Seed Admin',
   'seed-admin@playup.local',
   now(),
   'seed-development-only'
@@ -85,7 +85,7 @@ INSERT INTO games (
 VALUES
   ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'seed-dev-game-1', encode(digest('seed-game-1', 'sha256'), 'hex'), 'seed-game', current_date - 7, '19:00', '20:15', 75, ((current_date - 7) + time '19:00') AT TIME ZONE 'Europe/Lisbon', (((current_date - 7) + time '19:00') AT TIME ZONE 'Europe/Lisbon') + interval '75 minutes', 'Riverside Arena', '1', 12000, 'EUR', 12, NULL, 2, 'finished', 'Bank transfer', 'Finished test game', '1', '00000000-0000-0000-0000-000000000001'),
   ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'seed-dev-game-2', encode(digest('seed-game-2', 'sha256'), 'hex'), 'seed-game', current_date + 1, '19:30', '20:45', 75, ((current_date + 1) + time '19:30') AT TIME ZONE 'Europe/Lisbon', (((current_date + 1) + time '19:30') AT TIME ZONE 'Europe/Lisbon') + interval '75 minutes', 'Riverside Arena', '2', 12000, 'EUR', 12, 10, 2, 'active', 'Bank transfer', 'Please arrive 15 minutes early', '2', '00000000-0000-0000-0000-000000000001'),
-  ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'seed-dev-game-3', encode(digest('seed-game-3', 'sha256'), 'hex'), 'seed-game', current_date + 365, '18:00', '19:30', 90, ((current_date + 365) + time '18:00') AT TIME ZONE 'Europe/Lisbon', (((current_date + 365) + time '18:00') AT TIME ZONE 'Europe/Lisbon') + interval '90 minutes', 'PlayUp Sports Club', 'A', 15000, 'EUR', 14, NULL, 2, 'active', 'Bank transfer', 'Please confirm your attendance early', '3', '00000000-0000-0000-0000-000000000001'),
+  ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'seed-dev-game-3', encode(digest('seed-game-3', 'sha256'), 'hex'), 'seed-game', current_date + 365, '18:00', '19:30', 90, ((current_date + 365) + time '18:00') AT TIME ZONE 'Europe/Lisbon', (((current_date + 365) + time '18:00') AT TIME ZONE 'Europe/Lisbon') + interval '90 minutes', 'PlayMate Sports Club', 'A', 15000, 'EUR', 14, NULL, 2, 'active', 'Bank transfer', 'Please confirm your attendance early', '3', '00000000-0000-0000-0000-000000000001'),
   ('30000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', 'city-night-game-201', encode(digest('seed-game-201', 'sha256'), 'hex'), 'seed-game', current_date + 2, '20:00', '21:15', 75, ((current_date + 2) + time '20:00') AT TIME ZONE 'Europe/Lisbon', (((current_date + 2) + time '20:00') AT TIME ZONE 'Europe/Lisbon') + interval '75 minutes', 'Urban Sports Center', 'B', 10000, 'EUR', 6, 4, 2, 'active', 'Pix ou transferência', 'Dados de demonstração', '201', '00000000-0000-0000-0000-000000000001'),
   ('30000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000002', 'city-night-game-202', encode(digest('seed-game-202', 'sha256'), 'hex'), 'seed-game', current_date + 6, '20:00', '21:15', 75, ((current_date + 6) + time '20:00') AT TIME ZONE 'Europe/Lisbon', (((current_date + 6) + time '20:00') AT TIME ZONE 'Europe/Lisbon') + interval '75 minutes', 'Urban Sports Center', 'A', 10000, 'EUR', 6, 4, 2, 'active', 'Pix ou transferência', 'Dados de demonstração', '202', '00000000-0000-0000-0000-000000000001'),
   ('30000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000003', 'weekend-friends-game-301', encode(digest('seed-game-301', 'sha256'), 'hex'), 'seed-game', current_date + 3, '20:00', '21:15', 75, ((current_date + 3) + time '20:00') AT TIME ZONE 'Europe/Lisbon', (((current_date + 3) + time '20:00') AT TIME ZONE 'Europe/Lisbon') + interval '75 minutes', 'Green Field Club', '3', 10000, 'EUR', 6, 4, 2, 'active', 'Pix ou transferência', 'Dados de demonstração', '301', '00000000-0000-0000-0000-000000000001'),

@@ -10,7 +10,7 @@ DEVELOPMENT_PASSWORD_MARKER = ":playup@"
 
 
 class Settings(BaseSettings):
-    app_name: str = "PlayUp API"
+    app_name: str = "PlayMate Sports API"
     environment: str = "development"
     database_url: str = DEFAULT_DATABASE_URL
 

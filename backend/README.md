@@ -1,4 +1,4 @@
-# PlayUp backend
+# PlayMate Sports backend
 
 Python 3.12+, FastAPI, async SQLAlchemy 2, PostgreSQL 16, Alembic.
 

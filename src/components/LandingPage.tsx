@@ -36,7 +36,7 @@ const content = {
     ),
     intro:
       "Crie jogos, cadastre jogadores, monte times equilibrados e participe de jogos em poucos cliques.",
-    enter: "Entrar no PlayMate",
+    enter: "Entrar no PlayMate Sports",
     enterDescription: "Veja seus jogos, grupos e ferramentas de organização.",
   },
   en: {
@@ -50,7 +50,7 @@ const content = {
     ),
     intro:
       "Create games, register players, build balanced teams, and join games in a few clicks.",
-    enter: "Open PlayMate",
+    enter: "Open PlayMate Sports",
     enterDescription: "View your games, groups, and organizer tools.",
   },
 };
@@ -539,7 +539,10 @@ export function LandingPage({
             </svg>
           </button>
         </div>
-        <img className="brand-mark" src={playMateLogo} alt="PlayMate" />
+        <div className="brand-lockup" aria-label="PlayMate Sports">
+          <img className="brand-mark" src={playMateLogo} alt="" />
+          <span className="brand-sports" aria-hidden="true">SPORTS</span>
+        </div>
       </div>
       <div className="landing-content">
         <section className="landing-hero-copy">

@@ -83,7 +83,7 @@ export function Header({
       <a
         className="logo"
         href="#"
-        aria-label="PlayMate"
+        aria-label="PlayMate Sports"
         onClick={(event) => {
           event.preventDefault();
           (onHome ?? onBack)();

@@ -1,8 +1,8 @@
-# PlayMate
+# PlayMate Sports
 
 **[Read in English](README.md)**
 
-PlayMate é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
+PlayMate Sports é uma aplicação web para organizar partidas esportivas em grupo. Um mesmo perfil pode gerenciar alguns grupos, participar de outros e manter uma lista própria dos próximos jogos.
 
 > O projeto está em uma transição de MVP por etapas. O backend em PostgreSQL/FastAPI já está publicado e o endpoint `/api/health` verifica a conectividade com o banco, mas a interface liberada ainda guarda seus dados e o login de demonstração localmente no navegador. Envio real de e-mail, autenticação no servidor e sincronização entre dispositivos ainda não estão habilitados na interface.
 
@@ -105,7 +105,7 @@ Os jogos são ordenados cronologicamente. Um jogo encerrado sempre usa o mesmo l
 - Idioma inicial baseado no navegador: português para navegadores em português e inglês como padrão para os demais.
 - Troca manual de idioma no cabeçalho de todas as páginas.
 - Layout responsivo para desktop e celular.
-- Logotipo PlayMate no cabeçalho; clicar nele leva à página inicial quando aplicável.
+- Logotipo PlayMate Sports no cabeçalho; clicar nele leva à página inicial quando aplicável.
 
 ## Fluxo atual do protótipo
 

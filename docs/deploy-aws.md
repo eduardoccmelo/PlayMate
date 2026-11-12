@@ -1,4 +1,4 @@
-# Deploying PlayUp on an AWS EC2 instance
+# Deploying PlayMate Sports on an AWS EC2 instance
 
 One instance, Docker Compose, three containers: PostgreSQL, the FastAPI
 backend, and nginx serving the built frontend and proxying `/api/*` to the
@@ -23,8 +23,8 @@ docker compose version   # needs >= 2.20
 ## 2. First deploy
 
 ```bash
-git clone https://github.com/eduardoccmelo/PlayUp.git
-cd PlayUp
+git clone https://github.com/eduardoccmelo/PlayMate.git
+cd PlayMate
 cp .env.example .env
 # set POSTGRES_PASSWORD (openssl rand -base64 32); keep PLAYUP_ENVIRONMENT=production
 nano .env

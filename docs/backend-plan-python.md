@@ -1,4 +1,4 @@
-# PlayUp — backend plan (Python)
+# PlayMate Sports — backend plan (Python)
 
 **Status:** unified plan. Supersedes `backend-schema.md` and `playup-sql-schema-plan.html`, merging every feature that existed in only one of them.
 **Stack:** Python 3.12 + FastAPI + SQLAlchemy 2.0 + PostgreSQL 16.

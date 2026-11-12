@@ -24,11 +24,11 @@ class Mailer:
 
     def _send_access_code(self, recipient: str, code: str) -> None:
         message = EmailMessage()
-        message["Subject"] = "Your PlayMate access code"
+        message["Subject"] = "Your PlayMate Sports access code"
         message["From"] = self.settings.smtp_from_email
         message["To"] = recipient
         message.set_content(
-            "Your PlayMate access code is "
+            "Your PlayMate Sports access code is "
             f"{code}. It expires in {self.settings.access_code_ttl_minutes} minutes."
         )
 
