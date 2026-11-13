@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -14,8 +14,8 @@ from app.core.security import (
     verify_secret,
 )
 from app.core.time import utcnow
-from app.db.models import Group, GroupMembership, PlayerProfile, User
-from app.domain.enums import GroupRole
+from app.db.models import Game, GameParticipant, Group, GroupMembership, PlayerProfile, User
+from app.domain.enums import GroupRole, ParticipantStatus
 from app.domain.errors import Conflict, NotFound, PermissionDenied
 
 JOIN_CODE_LENGTH = 8
@@ -40,7 +40,7 @@ async def create_group(
     organizer_passcode: str,
     timezone: str = "Europe/Lisbon",
 ) -> CreatedGroup:
-    """Rule 1: creating a group creates an active admin membership for its
+    """Rule 1: creating a group creates an active owner membership for its
     creator, in the same transaction."""
     join_code = generate_code(JOIN_CODE_LENGTH)
     group = Group(
@@ -56,7 +56,7 @@ async def create_group(
     await session.flush()
 
     session.add(
-        GroupMembership(group_id=group.id, user_id=creator_id, role=GroupRole.ADMIN)
+        GroupMembership(group_id=group.id, user_id=creator_id, role=GroupRole.OWNER)
     )
 
     # Rule 4: joining a game goes through a linked profile, and an organizer
@@ -129,6 +129,8 @@ async def join_group(
     if group.archived_at is not None:
         raise Conflict("That group is archived")
 
+    if role is GroupRole.OWNER:
+        raise PermissionDenied("A group owner cannot join through a shared code")
     if role is GroupRole.ADMIN and (
         organizer_passcode is None
         or not verify_secret(group.organizer_passcode_hash, organizer_passcode)
@@ -174,8 +176,67 @@ async def change_passcode(
 
 
 async def leave_group(session: AsyncSession, *, group_id: UUID, user_id: UUID) -> None:
-    membership = await find_membership(session, group_id=group_id, user_id=user_id)
+    membership = (
+        await session.execute(
+            select(GroupMembership)
+            .where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.user_id == user_id,
+                GroupMembership.left_at.is_(None),
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if membership is None:
         raise NotFound("You are not a member of that group")
+
+    if membership.role is GroupRole.OWNER:
+        candidates = list(
+            (
+                await session.execute(
+                    select(GroupMembership)
+                    .where(
+                        GroupMembership.group_id == group_id,
+                        GroupMembership.user_id != user_id,
+                        GroupMembership.left_at.is_(None),
+                    )
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not candidates:
+            raise Conflict("Transfer ownership before leaving the last active group member")
+
+        async def participation_count(candidate: GroupMembership) -> int:
+            return int(
+                (
+                    await session.execute(
+                        select(func.count())
+                        .select_from(GameParticipant)
+                        .join(Game, Game.id == GameParticipant.game_id)
+                        .where(
+                            Game.group_id == group_id,
+                            GameParticipant.user_id == candidate.user_id,
+                            GameParticipant.status == ParticipantStatus.CONFIRMED,
+                        )
+                    )
+                ).scalar_one()
+            )
+
+        counts = {
+            candidate.id: await participation_count(candidate) for candidate in candidates
+        }
+        successor = min(
+            candidates,
+            key=lambda candidate: (-counts[candidate.id], candidate.joined_at),
+        )
+        # The partial unique index allows only one active owner. Demote the
+        # departing owner before promoting the successor, inside this request
+        # transaction, so PostgreSQL never sees two active owners.
+        membership.role = GroupRole.ADMIN
+        await session.flush()
+        successor.role = GroupRole.OWNER
     membership.left_at = utcnow()
     await session.flush()

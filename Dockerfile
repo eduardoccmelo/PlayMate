@@ -1,5 +1,12 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
+
+# Vite substitutes VITE_* variables at build time. Keep browser storage as
+# the safe default until the matching API vertical slice is production-ready.
+ARG VITE_DATA_SOURCE=browser
+ARG VITE_DEMO_SEED=false
+ENV VITE_DATA_SOURCE=$VITE_DATA_SOURCE
+ENV VITE_DEMO_SEED=$VITE_DEMO_SEED
 
 COPY package*.json ./
 RUN npm ci

@@ -50,7 +50,9 @@ async def start_sign_in(
     to the mailer. It is never stored.
     """
     user = (
-        await session.execute(select(User).where(User.email == email))
+        await session.execute(
+            select(User).where(User.email == email).with_for_update()
+        )
     ).scalar_one_or_none()
 
     access_code = generate_code(ACCESS_CODE_LENGTH)
@@ -73,15 +75,31 @@ async def verify_access_code(
     session: AsyncSession, *, email: str, access_code: str, device_label: str | None = None
 ) -> IssuedSession:
     user = (
-        await session.execute(select(User).where(User.email == email))
+        await session.execute(
+            select(User).where(User.email == email).with_for_update()
+        )
     ).scalar_one_or_none()
-    if user is None or not verify_secret(user.access_code_hash, access_code):
+    is_expired = (
+        user is not None
+        and user.access_code_updated_at
+        < utcnow() - timedelta(minutes=get_settings().access_code_ttl_minutes)
+    )
+    if (
+        user is None
+        or is_expired
+        or not verify_secret(user.access_code_hash, access_code)
+    ):
         # Same message either way, so the endpoint does not confirm which
         # addresses are registered.
         raise NotAuthenticated("Invalid email or access code")
 
     if user.email_verified_at is None:
         user.email_verified_at = utcnow()
+    # A successful verification consumes the code. Keep a non-matching hash so
+    # the non-null database constraint remains intact without retaining a code
+    # that can be replayed during its original five-minute window.
+    user.access_code_hash = hash_secret(generate_token())
+    user.access_code_updated_at = utcnow()
     return await issue_session(session, user=user, device_label=device_label)
 
 

@@ -1,6 +1,6 @@
 import type { GameSession, Player } from "../types";
 import { localize } from "../i18n";
-import { currencySymbol, pricePerPlayer } from "../utils/game";
+import { currencySymbol, hasPaymentTracking, pricePerPlayer } from "../utils/game";
 import { Teams } from "./Teams";
 import { EventSummary } from "./EventSummary";
 
@@ -12,6 +12,7 @@ type ReadOnlyGameProps = {
 };
 
 export function ReadOnlyGame({ game, players, language, onDelete }: ReadOnlyGameProps) {
+  const paymentTrackingEnabled = hasPaymentTracking(game);
   const paidPlayers = game.paidPlayerIds.filter((playerId) =>
     game.playerIds.includes(playerId),
   );
@@ -47,10 +48,10 @@ export function ReadOnlyGame({ game, players, language, onDelete }: ReadOnlyGame
           <strong>{game.waitlistIds.length}</strong>
           <span>{localize("lista de espera", language)}</span>
         </div>
-        <div>
+        {paymentTrackingEnabled && <div>
           <strong>{paidPlayers.length}</strong>
           <span>{localize("pagos / confirmados", language)}</span>
-        </div>
+        </div>}
         <div>
           <strong>{currencySymbol(game.currency)} {pricePerPlayer(game).toFixed(2)}</strong>
           <span>{localize("por jogador", language)}</span>
@@ -64,7 +65,7 @@ export function ReadOnlyGame({ game, players, language, onDelete }: ReadOnlyGame
             <>
               <h2>{localize("Participantes", language)} ({game.playerIds.length}/{game.maxPlayers})</h2>
               {listedPlayers.map((player, index) => {
-                const isPaid = game.paidPlayerIds.includes(player.id);
+                const isPaid = paymentTrackingEnabled && game.paidPlayerIds.includes(player.id);
                 return (
                   <div className={`readonly-row ${isPaid ? "is-paid" : ""}`} key={player.id}>
                     <strong>
@@ -75,12 +76,12 @@ export function ReadOnlyGame({ game, players, language, onDelete }: ReadOnlyGame
                         </small>
                       )}
                     </strong>
-                    <span
+                    {paymentTrackingEnabled && <span
                       aria-label={localize(isPaid ? "Pago" : "Pendente", language)}
                       className={`readonly-payment-mark ${isPaid ? "paid" : "pending"}`}
                     >
                       {isPaid ? "✓" : "×"}
-                    </span>
+                    </span>}
                   </div>
                 );
               })}

@@ -80,7 +80,11 @@ class GroupContext:
 
     @property
     def is_admin(self) -> bool:
-        return self.membership.role is GroupRole.ADMIN
+        return self.membership.role in (GroupRole.OWNER, GroupRole.ADMIN)
+
+    @property
+    def is_owner(self) -> bool:
+        return self.membership.role is GroupRole.OWNER
 
 
 async def require_group_member(
@@ -104,8 +108,17 @@ async def require_group_admin(
     return context
 
 
+async def require_group_owner(
+    context: Annotated[GroupContext, Depends(require_group_member)],
+) -> GroupContext:
+    if not context.is_owner:
+        raise PermissionDenied("Only the group owner may do that")
+    return context
+
+
 GroupMemberDep = Annotated[GroupContext, Depends(require_group_member)]
 GroupAdminDep = Annotated[GroupContext, Depends(require_group_admin)]
+GroupOwnerDep = Annotated[GroupContext, Depends(require_group_owner)]
 
 
 @dataclass

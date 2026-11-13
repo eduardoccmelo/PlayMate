@@ -1,4 +1,4 @@
-# Deploying PlayUp on an AWS EC2 instance
+# Deploying PlayMate Sports on an AWS EC2 instance
 
 One instance, Docker Compose, four containers: Caddy (TLS), nginx serving the
 built frontend and proxying `/api/*`, the FastAPI backend, and PostgreSQL.
@@ -13,7 +13,7 @@ Section 5 turns on HTTPS.
 
 ## 1. Instance
 
-- Ubuntu 24.04 LTS, `t3.small` or larger (the Node build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
+- Ubuntu 24.04 LTS, `t3.small` or larger (the Node 22 build step needs ~1 GB free RAM; on a `t3.micro` add 1 GB of swap first).
 - Security group inbound: **80** and **443** (TCP; UDP 443 too if you want HTTP/3) from anywhere, **22** from your IP only, or no SSH at all if you use SSM. Do not open 5432 or 8000. Port 80 must stay open after HTTPS is on: Let's Encrypt validates and browsers get redirected through it.
 - Install Docker Engine + Compose plugin from Docker's repository (the Ubuntu `docker.io` package ships an old Compose):
 
@@ -26,20 +26,41 @@ docker compose version   # needs >= 2.20
 ## 2. First deploy
 
 ```bash
-git clone https://github.com/eduardoccmelo/PlayUp.git
-cd PlayUp
+git clone https://github.com/eduardoccmelo/PlayMate.git
+cd PlayMate
 cp .env.example .env
 # set POSTGRES_PASSWORD (openssl rand -base64 32); keep PLAYUP_ENVIRONMENT=production
 nano .env
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 docker compose ps           # db, backend, frontend "healthy"; caddy "Up"
-curl -s http://localhost/api/health   # {"status":"ok"} (plain HTTP until section 5)
+curl -s http://localhost/api/health   # {"status":"ok","database":"ok"} (plain HTTP until section 5)
 ```
 
 The backend runs `alembic upgrade head` on every start, so the schema is
 created on the first boot and upgraded on later ones. The database lives in
 the `playup-db` named volume and survives `down`/`up`.
+
+The health check performs `SELECT 1` against PostgreSQL. A container or
+deployment is therefore unhealthy when its API process is alive but its
+database connection is not.
+
+The frontend is built by Vite, so its `VITE_*` variables are build-time
+inputs. GitHub repository variables `VITE_DATA_SOURCE` and `VITE_DEMO_SEED`
+are written into the deployment `.env` and forwarded as Docker build args.
+Keep them as `browser` and `false` respectively until SMTP and the matching
+groups/games API slices are production-ready.
+
+## 2.1 SMTP for production sign-in
+
+Set GitHub repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`. AWS SES SMTP credentials are supported
+directly. The sender identity must be verified in SES; keep the account in the
+SES sandbox only while all recipient addresses are also verified.
+
+The production API refuses `POST /api/v1/auth/start` with HTTP 503 when SMTP
+is absent, rather than claiming a code was sent. Development continues to
+return the code in the API response for local testing.
 
 **Do not load `db/seed.sql` in production.** It creates demo users and groups
 with placeholder credentials.
@@ -159,12 +180,9 @@ database.
 
 ## 6. Things to know before real users
 
-- **Sign-in has no mailer yet.** In production the access code is *not*
-  returned by the API; it is written to the backend log
-  (`docker compose logs backend | grep "Access code"`). Until a mailer exists,
-  only someone with server access can complete a sign-in. Do **not** work
-  around this with `PLAYUP_ENVIRONMENT=development` on a public host: that
-  returns the code to whoever asks, so anyone could sign in as any email.
+- **Configure SMTP for sign-in.** Set the `SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL` GitHub secrets as
+  described in section 2.1. Without SMTP, production sign-in returns HTTP 503.
 - **HTTPS is off until `SITE_ADDRESS` is set** (section 5). Do not let
   people sign in over plain HTTP.
 - **No rate limiting** on `/v1/auth/*` or `/v1/groups/join` yet

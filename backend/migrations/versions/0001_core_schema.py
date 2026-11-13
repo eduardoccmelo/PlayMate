@@ -1,4 +1,4 @@
-"""Create the PlayUp core schema.
+"""Create the PlayMate Sports core schema.
 
 This migration is the single source of truth for the PostgreSQL schema:
 extensions, enum types, tables, CHECK constraints, partial indexes, the
@@ -22,7 +22,7 @@ CREATE EXTENSION IF NOT EXISTS citext;
 """
 
 ENUMS = """
-CREATE TYPE group_role AS ENUM ('admin', 'participant');
+CREATE TYPE group_role AS ENUM ('owner', 'admin', 'participant');
 CREATE TYPE game_status AS ENUM ('active', 'cancelled', 'finished', 'deleted');
 CREATE TYPE cancel_reason AS ENUM ('manual', 'min_players');
 CREATE TYPE player_mobility AS ENUM ('rapido', 'neutro', 'lento');
@@ -97,6 +97,8 @@ CREATE TABLE group_memberships (
 );
 CREATE UNIQUE INDEX group_memberships_one_active_idx
   ON group_memberships(group_id, user_id) WHERE left_at IS NULL;
+CREATE UNIQUE INDEX group_memberships_one_active_owner_idx
+  ON group_memberships(group_id) WHERE role = 'owner' AND left_at IS NULL;
 CREATE INDEX group_memberships_user_active_idx
   ON group_memberships(user_id, group_id) WHERE left_at IS NULL;
 

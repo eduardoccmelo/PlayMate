@@ -1,5 +1,5 @@
 import playMateIcon from "../assets/playmate-icon.png";
-import type { Language } from "../i18n";
+import { localize, type Language } from "../i18n";
 
 function LogoutIcon() {
   return (
@@ -71,7 +71,7 @@ export function Header({
         )}
         {onProfile && (
           <button
-            aria-label="User settings"
+            aria-label={localize("Configurações do perfil", language ?? "pt")}
             className="secondary header-profile-button"
             onClick={onProfile}
             type="button"
@@ -83,7 +83,7 @@ export function Header({
       <a
         className="logo"
         href="#"
-        aria-label="PlayMate"
+        aria-label="PlayMate Sports"
         onClick={(event) => {
           event.preventDefault();
           (onHome ?? onBack)();

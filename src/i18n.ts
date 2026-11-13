@@ -6,6 +6,7 @@ export const translations: Record<
   en: {
     Olá: "Hi",
     "SEU PERFIL": "YOUR PROFILE",
+    "Configurações do perfil": "Profile settings",
     "Como devemos chamar você?": "What should we call you?",
     "Seu nome": "Your name",
     você: "you",
@@ -83,14 +84,14 @@ export const translations: Record<
     votos: "votes",
     "Sem votos ainda": "No votes yet",
     "Votação de atributos": "Attribute voting",
-    "Cada voto atualiza a média imediatamente. Você não pode ver nem votar seu próprio nível ou velocidade.":
-      "Each vote updates the average immediately. You cannot see or vote on your own level or speed.",
+    "Seu nível e velocidade são definidos pelos outros admins.":
+      "Your level and speed are defined by the other admins.",
+    "Cada admin vota nos outros jogadores. Cada voto atualiza a média imediatamente.":
+      "Each admin votes for the other players. Each vote updates the average immediately.",
     "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.":
       "Each admin votes for every player, including themselves. Each vote updates the average immediately.",
     "Seu voto será combinado com os votos dos outros admins.":
       "Your vote will be combined with the other admins' votes.",
-    "Seu nível e velocidade são definidos pelos outros admins.":
-      "Your level and speed are defined by the other admins.",
     "Média atual": "Current average",
     Votos: "Votes",
     "Convidar admins": "Invite admins",
@@ -147,6 +148,7 @@ export const translations: Record<
       "Enter a valid date in DD/MM/YYYY format.",
     Moeda: "Currency",
     "Informações de pagamento": "Payment details",
+    "Informações de pagamento (opcional)": "Payment details (optional)",
     "Ex.: Clube Central": "E.g. Central Club",
     "Ex.: 3": "E.g. 3",
     "Ex.: 120": "E.g. 120",
@@ -173,6 +175,7 @@ export const translations: Record<
     "por pessoa": "per person",
     minutos: "minutes",
     "Número da quadra": "Court number",
+    "Número da quadra (opcional)": "Court number (optional)",
     "Valor da quadra": "Court cost",
     "Máximo de jogadores": "Maximum players",
     Início: "Start",
@@ -186,6 +189,13 @@ export const translations: Record<
       "The player will take the last pending spot.",
     Pendente: "Pending",
     Pago: "Paid",
+    "Todos pagos": "All paid",
+    "Marcar todos como pagos": "Mark all as paid",
+    "Incluir controle de pagamento": "Include payment tracking",
+    "Incluir prazo de pagamento": "Include payment deadline",
+    Prazo: "Deadline",
+    dia: "day",
+    dias: "days",
     PAGAMENTO: "PAYMENT",
     "LISTA DE ESPERA": "WAITING LIST",
     "lista de espera": "waiting list",
@@ -194,8 +204,8 @@ export const translations: Record<
     "Gerar times": "Generate teams",
     "Balancear novamente": "Balance again",
     "Fazer o último balanceamento": "Make the final rebalance",
-    "Deixe o balanceamento como etapa final, de preferência no dia do jogo. Com a lista completa e todos pagos, os times são gerados automaticamente.":
-      "Leave team balancing as a final step, ideally on game day. When the list is full and everyone is paid, teams are generated automatically.",
+    "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.":
+      "Team balancing is manual. Use it when the list is ready; every game has three regular attempts and one final attempt available 15 minutes before kickoff.",
     "Rebalanceamentos manuais": "Manual rebalances",
     Balanceamentos: "Balances",
     de: "of",
@@ -203,8 +213,8 @@ export const translations: Record<
     Administrator: "Administrator",
     "Balanceamento final acionado pelo sistema.":
       "Final balance triggered by the system.",
-    "O limite foi atingido. O sistema gerará os times automaticamente 15 minutos antes do jogo.":
-      "The limit has been reached. The system will generate teams automatically 15 minutes before the game.",
+    "Adicione pelo menos 2 jogadores à lista para gerar os times.":
+      "Add at least 2 players to the list to generate teams.",
     Estatísticas: "Statistics",
     "Criador/Admin": "Owner/Admin",
     "Painel do admin": "Admin panel",
@@ -219,6 +229,9 @@ export const translations: Record<
     "ou participe": "or join",
     "Busque seu nome": "Search your name",
     "Buscar jogadores": "Search players",
+    "Nenhum jogador encontrado.": "No players found.",
+    "Adicionar jogadores": "Add players",
+    "+ Adicionar jogadores": "+ Add players",
     "Confirmar presença": "Confirm attendance",
     "Não encontrou seu nome?": "Can't find your name?",
     "Seu nome completo": "Your full name",
@@ -280,8 +293,6 @@ export const translations: Record<
       "You cannot create a game at a time that has already passed.",
     "O horário de término deve ser posterior ao início.":
       "End time must be after start time.",
-    "A duração precisa terminar no mesmo dia.":
-      "The duration must end on the same day.",
     "Esse nome já está na lista.": "This name is already on the list.",
     "Já existe um grupo com esse nome.":
       "A group with this name already exists.",
@@ -375,8 +386,6 @@ export const translations: Record<
     "Adicionar novo jogador": "Add new player",
     "Adicionando jogador": "Adding player",
     "Editando jogador": "Editing player",
-    "Jogador adicionado com sucesso.": "Player added successfully.",
-    "Jogador atualizado com sucesso.": "Player updated successfully.",
     "O nome deve ter no máximo 12 caracteres.":
       "The name can have at most 12 characters.",
     "O nome deve ter no máximo 20 caracteres.":
@@ -414,8 +423,8 @@ export const translations: Record<
       "Team balancing will be available only when the list is full and every player has paid.",
     "Marque pelo menos 2 jogadores como pagos para gerar os times.":
       "Mark at least 2 players as paid to generate teams.",
-    "O limite de 1 rebalanceamento foi atingido. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.":
-      "The limit of 1 rebalance has been reached. The button will be re-enabled 15 minutes before the game and remain available until it ends for one final rebalance only.",
+    "Os balanceamentos regulares foram utilizados. O botão será reativado 15 minutos antes do jogo e ficará disponível até o fim para somente mais 1 rebalanceamento final.":
+      "The regular balances have been used. The button will be re-enabled 15 minutes before the game and remain available until it ends for one final rebalance only.",
     "Somente mais 1 rebalanceamento final disponível.":
       "Only 1 final rebalance remains available.",
     "O rebalanceamento final já foi utilizado.":

@@ -1,4 +1,4 @@
-# PlayUp database
+# PlayMate Sports database
 
 PostgreSQL 16.
 

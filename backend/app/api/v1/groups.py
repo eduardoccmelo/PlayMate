@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.deps import GroupAdminDep, GroupMemberDep, SessionDep, ViewerDep
+from app.api.deps import GroupMemberDep, GroupOwnerDep, SessionDep, ViewerDep
 from app.domain import groups as groups_domain
 from app.schemas.groups import (
     ChangePasscodeRequest,
@@ -82,7 +82,7 @@ async def read_group(context: GroupMemberDep) -> GroupResponse:
 
 @router.post("/groups/{group_id}/passcode", status_code=204)
 async def change_passcode(
-    body: ChangePasscodeRequest, context: GroupAdminDep, session: SessionDep
+    body: ChangePasscodeRequest, context: GroupOwnerDep, session: SessionDep
 ) -> None:
     await groups_domain.change_passcode(
         session,

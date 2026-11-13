@@ -9,6 +9,7 @@ from enum import StrEnum
 
 
 class GroupRole(StrEnum):
+    OWNER = "owner"
     ADMIN = "admin"
     PARTICIPANT = "participant"
 

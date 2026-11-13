@@ -14,6 +14,8 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
   APP_DIR: /opt/playup
+  VITE_DATA_SOURCE: ${{ vars.VITE_DATA_SOURCE || 'browser' }}
+  VITE_DEMO_SEED: ${{ vars.VITE_DEMO_SEED || 'false' }}
 
 jobs:
   deploy:
@@ -31,6 +33,11 @@ jobs:
           # Repository variable, e.g. "example.com, www.example.com".
           # Empty until DNS points at the instance: plain HTTP on port 80.
           SITE_ADDRESS: ${{ vars.SITE_ADDRESS || ':80' }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
           SHA: ${{ github.sha }}
         run: |
@@ -47,6 +54,13 @@ jobs:
           POSTGRES_PASSWORD=$POSTGRES_PASSWORD
           PLAYUP_ENVIRONMENT=production
           SITE_ADDRESS=$SITE_ADDRESS
+          VITE_DATA_SOURCE=$VITE_DATA_SOURCE
+          VITE_DEMO_SEED=$VITE_DEMO_SEED
+          PLAYUP_SMTP_HOST=$SMTP_HOST
+          PLAYUP_SMTP_PORT=${SMTP_PORT:-587}
+          PLAYUP_SMTP_USERNAME=$SMTP_USERNAME
+          PLAYUP_SMTP_PASSWORD=$SMTP_PASSWORD
+          PLAYUP_SMTP_FROM_EMAIL=$SMTP_FROM_EMAIL
           ENV
           chmod 600 .env
           SITE_ADDRESS=\$(sed -n 's/^SITE_ADDRESS=//p' .env)
