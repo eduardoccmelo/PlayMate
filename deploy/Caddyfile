@@ -1,0 +1,23 @@
+# Public entry point. Terminates TLS and forwards everything to nginx.
+#
+# SITE_ADDRESS (from .env) decides the mode:
+#   unset / ":80"                         plain HTTP on the instance IP (no domain yet)
+#   "example.com, www.example.com"        HTTPS with certificates issued and renewed
+#                                         automatically by Let's Encrypt, HTTP -> HTTPS redirect
+#
+# Certificates live in the caddy-data volume. Do not delete it: reissuing on
+# every deploy runs into Let's Encrypt rate limits.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		# Ignored by browsers over plain HTTP, so safe in both modes.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy frontend:80
+}
