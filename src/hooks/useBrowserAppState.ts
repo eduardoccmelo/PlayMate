@@ -1,4 +1,5 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { runtimeConfig } from "../config/runtime";
 import {
   browserAppRepository,
   type BrowserAppState,
@@ -17,6 +18,7 @@ export function useBrowserAppState(): [
   );
 
   useEffect(() => {
+    if (runtimeConfig.dataSource === "api") return;
     browserAppRepository.save(state);
   }, [state]);
 

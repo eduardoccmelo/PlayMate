@@ -19,6 +19,80 @@ export type AccessCodeStart = {
   accessCode?: string | null;
 };
 
+export type ApiGroup = {
+  id: string;
+  name: string;
+  publicSlug: string;
+  timezone: string;
+  role: "owner" | "admin" | "participant" | null;
+};
+
+export type ApiGame = {
+  id: string;
+  groupId: string;
+  publicSlug: string;
+  gameDate: string;
+  startTime: string;
+  endTime: string | null;
+  durationMinutes: number;
+  location: string;
+  courtNumber: string;
+  courtCostCents: number;
+  currency: "EUR" | "USD" | "GBP" | "BRL";
+  maxPlayers: number;
+  minPlayers: number | null;
+  status: "active" | "cancelled" | "finished" | "deleted";
+  cancelReason: "manual" | "min_players" | null;
+  paymentInfo: string;
+  playerNotice: string;
+};
+
+export type ApiParticipant = {
+  id: string;
+  playerId: string;
+  displayName: string;
+  status: "confirmed" | "waiting_list" | "left" | "removed";
+  listPosition: number | null;
+  paid: boolean;
+  team: "A" | "B" | null;
+};
+
+export type ApiGameDetail = {
+  game: ApiGame;
+  viewerAccess: {
+    kind: string;
+    status: string | null;
+    canViewDetails: boolean;
+    canViewGroupPlayers: boolean;
+    canJoin: boolean;
+    canLeave: boolean;
+    canUpdateOwnPayment: boolean;
+    canDrawTeams: boolean;
+    canManageGame: boolean;
+  };
+  confirmed: ApiParticipant[];
+  waitingList: ApiParticipant[];
+};
+
+export type ApiGameDraft = {
+  gameDate: string;
+  startTime: string;
+  durationMinutes: number;
+  maxPlayers: number;
+  minPlayers?: number | null;
+  location: string;
+  courtNumber: string;
+  courtCostCents: number;
+  currency: ApiGame["currency"];
+  autoCancellationHours?: number | null;
+  paymentInfo: string;
+  playerNotice: string;
+};
+
+const withToken = (token: string): HeadersInit => ({
+  Authorization: `Bearer ${token}`,
+});
+
 const SESSION_KEY = "playmate.api-session.v1";
 
 export const apiRepository = {
@@ -48,6 +122,114 @@ export const apiRepository = {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     }),
+  listGroups: (token: string) =>
+    apiFetch<ApiGroup[]>("/v1/groups", { headers: withToken(token) }),
+  createGroup: (token: string, name: string, organizerPasscode: string) =>
+    apiFetch<{ group: ApiGroup; joinCode: string }>("/v1/groups", {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({ name, organizerPasscode }),
+    }),
+  joinGroup: (
+    token: string,
+    joinCode: string,
+    displayName: string,
+    organizerPasscode?: string,
+  ) =>
+    apiFetch<ApiGroup>("/v1/groups/join", {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({
+        joinCode,
+        displayName,
+        role: organizerPasscode ? "admin" : "participant",
+        organizerPasscode,
+      }),
+    }),
+  changeGroupPasscode: (
+    token: string,
+    groupId: string,
+    currentPasscode: string,
+    newPasscode: string,
+  ) =>
+    apiFetch<void>(`/v1/groups/${groupId}/passcode`, {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({ currentPasscode, newPasscode }),
+    }),
+  leaveGroup: (token: string, groupId: string) =>
+    apiFetch<void>(`/v1/groups/${groupId}/leave`, {
+      method: "POST",
+      headers: withToken(token),
+    }),
+  listGames: (token: string, groupId: string) =>
+    apiFetch<ApiGame[]>(`/v1/groups/${groupId}/games`, {
+      headers: withToken(token),
+    }),
+  createGame: (token: string, groupId: string, game: ApiGameDraft) =>
+    apiFetch<{ game: ApiGame; joinCode: string }>(
+      `/v1/groups/${groupId}/games`,
+      {
+        method: "POST",
+        headers: withToken(token),
+        body: JSON.stringify(game),
+      },
+    ),
+  readGame: (token: string, gameId: string) =>
+    apiFetch<ApiGameDetail>(`/v1/games/${gameId}`, {
+      headers: withToken(token),
+    }),
+  updateGame: (token: string, gameId: string, changes: Partial<ApiGameDraft>) =>
+    apiFetch<ApiGame>(`/v1/games/${gameId}`, {
+      method: "PATCH",
+      headers: withToken(token),
+      body: JSON.stringify(changes),
+    }),
+  cancelGame: (token: string, gameId: string, reason: "manual" | "min_players") =>
+    apiFetch<ApiGame>(`/v1/games/${gameId}/cancel`, {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({ reason }),
+    }),
+  joinGame: (token: string, gameId: string, playerId?: string) =>
+    apiFetch<ApiGameDetail>(`/v1/games/${gameId}/participants`, {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({ playerId }),
+    }),
+  updatePayment: (token: string, gameId: string, participantId: string, paid: boolean) =>
+    apiFetch<ApiParticipant[]>(
+      `/v1/games/${gameId}/participants/${participantId}/payment`,
+      {
+        method: "PATCH",
+        headers: withToken(token),
+        body: JSON.stringify({ paid }),
+      },
+    ),
+  leaveGame: (token: string, gameId: string, participantId: string) =>
+    apiFetch<ApiParticipant[]>(
+      `/v1/games/${gameId}/participants/${participantId}/leave`,
+      { method: "POST", headers: withToken(token) },
+    ),
+  removeParticipant: (token: string, gameId: string, participantId: string) =>
+    apiFetch<ApiParticipant[]>(
+      `/v1/games/${gameId}/participants/${participantId}`,
+      { method: "DELETE", headers: withToken(token) },
+    ),
+  reorderParticipants: (
+    token: string,
+    gameId: string,
+    status: "confirmed" | "waiting_list",
+    orderedIds: string[],
+  ) =>
+    apiFetch<ApiParticipant[]>(
+      `/v1/games/${gameId}/participants/reorder`,
+      {
+        method: "POST",
+        headers: withToken(token),
+        body: JSON.stringify({ status, orderedIds }),
+      },
+    ),
   readSession: () => getStoredValue<ApiSession | null>(SESSION_KEY, null),
   saveSession: (session: ApiSession) => saveStoredValue(SESSION_KEY, session),
   clearSession: () => saveStoredValue<ApiSession | null>(SESSION_KEY, null),
