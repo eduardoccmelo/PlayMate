@@ -135,6 +135,30 @@ export const translations: Record<
     Excluir: "Delete",
     Cancelar: "Cancel",
     Fechar: "Close",
+    "Entre na sua conta para salvar o jogador.":
+      "Sign in to save the player.",
+    "Este jogador não está vinculado ao servidor.":
+      "This player is not linked to the server.",
+    "Não foi possível salvar o jogador.":
+      "We could not save the player.",
+    "Não foi possível salvar as alterações no servidor.":
+      "We could not save your changes to the server.",
+    "Não foi possível sair do jogo.":
+      "We could not remove you from the game.",
+    "Não foi possível sair do grupo.":
+      "We could not remove you from the group.",
+    "Não foi possível remover o jogador.":
+      "We could not remove the player.",
+    "Não foi possível excluir o jogo.":
+      "We could not delete the game.",
+    "Entre na sua conta para renomear o grupo.":
+      "Sign in to rename the group.",
+    "Entre na sua conta para compartilhar o grupo.":
+      "Sign in to share the group.",
+    "Não foi possível gerar o código.":
+      "We could not create a code.",
+    "Não foi possível renomear o grupo.":
+      "We could not rename the group.",
     "Confirmar exclusão": "Confirm deletion",
     "Esta ação não pode ser desfeita.": "This action cannot be undone.",
     "Número de jogadores": "Number of players",

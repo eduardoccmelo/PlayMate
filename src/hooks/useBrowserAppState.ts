@@ -13,14 +13,15 @@ export function useBrowserAppState(): [
   BrowserAppState,
   Dispatch<SetStateAction<BrowserAppState>>,
 ] {
+  const usesApi = runtimeConfig.dataSource === "api";
   const [state, setState] = useState<BrowserAppState>(() =>
-    browserAppRepository.load(),
+    usesApi ? browserAppRepository.loadPreferences() : browserAppRepository.load(),
   );
 
   useEffect(() => {
-    if (runtimeConfig.dataSource === "api") return;
-    browserAppRepository.save(state);
-  }, [state]);
+    if (usesApi) browserAppRepository.savePreferences(state);
+    else browserAppRepository.save(state);
+  }, [state, usesApi]);
 
   return [state, setState];
 }

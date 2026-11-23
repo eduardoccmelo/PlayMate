@@ -281,7 +281,7 @@ Data is stored only in the browser's `localStorage`. Consequently:
 - codes are validated only against local and seeded data, not remotely;
 - the profile/email/access-code journey is a local mock: there are no real accounts, email delivery, passcode recovery, server-enforced permissions, or audit trail.
 
-The backend API is deployed separately from the interface. `GET /api/health` returns success only after executing a database query; it is an infrastructure readiness probe, not proof that every product flow is API-backed. `VITE_DATA_SOURCE=api` uses server authentication and loads shared group memberships, game schedules, and game participant lists. Group creation/joining, passcode changes, game creation/edits/cancellation, participant changes, payment status, and roster ordering use the existing API routes. Do not enable API sign-in publicly until SMTP is configured: production returns HTTP 503 when access-code delivery is unavailable. Codes are eight uppercase alphanumeric characters, expire after five minutes, and are consumed after successful verification. The backend does not yet expose a group player-directory/skill-vote API or group rename and team-draw endpoints; those features are not shared by API mode. API-mode group and game state is not persisted to the browser repository. The target data model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
+The backend API is deployed separately from the interface. `GET /api/health` returns success only after executing a database query; it is an infrastructure readiness probe, not proof that every product flow is API-backed. `VITE_DATA_SOURCE=api` uses server authentication and loads shared group memberships, game schedules, and game participant lists. Group creation/joining/renaming, passcode changes, the group player directory (guest creation, edits, removal), game creation/edits/cancellation/deletion, participant changes, payment status, and roster ordering use the API. Participant ownership comes from the server's `userId`, never from matching display names. The server stores only a hash of each group join code, so sharing a group after a reload issues a fresh code and the previous one stops working. Do not enable API sign-in publicly until SMTP is configured: production returns HTTP 503 when access-code delivery is unavailable, and the deploy workflow refuses `VITE_DATA_SOURCE=api` without the `SMTP_*` secrets. Codes are eight uppercase alphanumeric characters, expire after five minutes, and are consumed after successful verification. Skill votes, team draws, joining a single game by code, and participant-created games are not yet backed by the server and stay local in API mode. In API mode only the language preference is kept in the browser. The target data model, permissions, API, profile recovery, and secure invite/token strategy are documented in [docs/backend-schema.md](docs/backend-schema.md).
 
 ## Deployment
 
@@ -295,7 +295,7 @@ Step-by-step instructions for an AWS EC2 instance are in [docs/deploy-aws.md](do
 
 ## Suggested next steps
 
-- Add server APIs for the player directory, skill votes, group renaming, and team draws, then connect those UI flows.
+- Add server APIs for skill votes, team draws (with the balance quota), and game-only guest access, then connect those UI flows.
 - Email-based profile recovery with an access-code regeneration flow.
 - Secure, shareable group and game links.
 - Payment integration and automatic payment confirmation.

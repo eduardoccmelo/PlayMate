@@ -25,7 +25,9 @@ type GroupSelectorProps = {
   onCreate: (name: string, passcode: string) => void | Promise<void>;
   onChoose: (group: PlayerGroup) => void;
   onChangePasscode: (groupId: string, currentPasscode: string, passcode: string) => void | Promise<void>;
-  onRename: (groupId: string, name: string) => void;
+  onRename: (groupId: string, name: string) => void | Promise<void>;
+  /** API mode: issue a fresh shareable code (the server stores only a hash). */
+  onRequestJoinCode?: (groupId: string) => Promise<string>;
   myGames: GameSession[];
   onJoinGroup: (code: string, passcode: string) => string | null | Promise<string | null>;
   onAddMyGame: (code: string) => string | null;
@@ -160,6 +162,7 @@ export function GroupSelector({
   onChoose,
   onChangePasscode,
   onRename,
+  onRequestJoinCode,
   myGames,
   onJoinGroup,
   onAddMyGame,
@@ -184,6 +187,7 @@ export function GroupSelector({
   const [renamedGroupName, setRenamedGroupName] = useState("");
   const [editCurrentPasscode, setEditCurrentPasscode] = useState("");
   const [groupError, setGroupError] = useState("");
+  const [shareError, setShareError] = useState("");
   const [joinError, setJoinError] = useState("");
   const [gameCodeError, setGameCodeError] = useState("");
   const canChangeGroupPasscode = Boolean(
@@ -266,8 +270,18 @@ export function GroupSelector({
     setIsAddingGame(false);
     setGameCodeError("");
   };
-  const openGroupInvite = (group: PlayerGroup, canInviteAdmins: boolean) => {
+  const openGroupInvite = async (group: PlayerGroup, canInviteAdmins: boolean) => {
     setInviteCodeCopied(null);
+    setShareError("");
+    if (group.apiManaged && !group.publicJoinCode && onRequestJoinCode) {
+      try {
+        const joinCode = await onRequestJoinCode(group.id);
+        setGroupInvite({ group: { ...group, publicJoinCode: joinCode }, canInviteAdmins });
+      } catch (error) {
+        setShareError(error instanceof Error ? error.message : "Não foi possível gerar o código.");
+      }
+      return;
+    }
     setGroupInvite({ group, canInviteAdmins });
   };
   const copyInviteCode = async (code: string, type: "players" | "admins") => {
@@ -322,6 +336,11 @@ export function GroupSelector({
             </button>
           </div>
         </div>
+        {shareError && (
+          <small className="error" role="alert">
+            {localize(shareError, language)}
+          </small>
+        )}
       </section>
 
       {isCreating && (
@@ -536,12 +555,14 @@ export function GroupSelector({
                           </>
                         )}
                       </div>
-                      <small>
-                        {localize("Código do grupo", language)}:{" "}
-                        {group.apiManaged
-                          ? group.publicJoinCode ?? ""
-                          : groupPlayerInviteCode(group)}
-                      </small>
+                      {(!group.apiManaged || group.publicJoinCode) && (
+                        <small>
+                          {localize("Código do grupo", language)}:{" "}
+                          {group.apiManaged
+                            ? group.publicJoinCode
+                            : groupPlayerInviteCode(group)}
+                        </small>
+                      )}
                     </div>
                     <div
                       className={`group-row-actions ${isAdmin ? "" : "group-member-actions"}`}
@@ -555,10 +576,10 @@ export function GroupSelector({
                           language,
                         )}
                       </button>
-                      {(!group.apiManaged || group.publicJoinCode) && (
+                      {(!group.apiManaged || group.publicJoinCode || isAdmin) && (
                         <button
                           className="primary group-share-button"
-                          onClick={() => openGroupInvite(group, isAdmin)}
+                          onClick={() => void openGroupInvite(group, isAdmin)}
                         >
                           {localize("Compartilhar", language)}
                         </button>
@@ -723,8 +744,13 @@ export function GroupSelector({
                   setGroupError("Senha atual incorreta.");
                   return;
                 }
-                if (nextName !== groupToRename.name && !groupToRename.apiManaged) {
-                  onRename(groupToRename.id, nextName);
+                if (nextName !== groupToRename.name) {
+                  try {
+                    await onRename(groupToRename.id, nextName);
+                  } catch (error) {
+                    setGroupError(error instanceof Error ? error.message : "Não foi possível renomear o grupo.");
+                    return;
+                  }
                 }
                 if (canChangeGroupPasscode && newPasscode.trim()) {
                   try {
@@ -744,16 +770,14 @@ export function GroupSelector({
               }}
             >
               <p className="form-mode">{localize("EDITAR GRUPO", language)}</p>
-              {!groupToRename.apiManaged && (
-                <input
-                  autoFocus
-                  required
-                  maxLength={20}
-                  placeholder={localize("Nome do grupo", language)}
-                  value={renamedGroupName}
-                  onChange={(event) => setRenamedGroupName(event.target.value)}
-                />
-              )}
+              <input
+                autoFocus
+                required
+                maxLength={20}
+                placeholder={localize("Nome do grupo", language)}
+                value={renamedGroupName}
+                onChange={(event) => setRenamedGroupName(event.target.value)}
+              />
               {groupError && (
                 <small className="error">
                   {localize(groupError, language)}

@@ -14,7 +14,7 @@ from app.api.deps import (
 from app.db.models import Game, GameParticipant, PlayerProfile
 from app.domain import games as games_domain
 from app.domain import participants as participants_domain
-from app.domain.enums import ParticipantStatus
+from app.domain.enums import GameStatus, ParticipantStatus
 from app.domain.errors import NotFound, PermissionDenied
 from app.schemas.games import (
     CancelGameRequest,
@@ -45,6 +45,7 @@ def _participant_response(row: GameParticipant) -> ParticipantResponse:
     return ParticipantResponse(
         id=row.id,
         player_id=row.player_id,
+        user_id=row.user_id,
         display_name=row.display_name_snapshot,
         status=row.status,
         list_position=row.list_position,
@@ -78,7 +79,7 @@ async def list_games(context: GroupMemberDep, session: SessionDep) -> list[GameR
         (
             await session.execute(
                 select(Game)
-                .where(Game.group_id == context.group.id)
+                .where(Game.group_id == context.group.id, Game.status != GameStatus.DELETED)
                 .order_by(Game.starts_at)
             )
         )
@@ -164,6 +165,11 @@ async def cancel_game(
     return GameResponse.model_validate(game)
 
 
+@router.delete("/games/{game_id}", status_code=204)
+async def delete_game(context: GameManagerDep, session: SessionDep) -> None:
+    await games_domain.delete_game(session, game_id=context.game.id)
+
+
 @router.post("/games/{game_id}/participants", response_model=GameDetailResponse, status_code=201)
 async def join_game(
     body: JoinGameRequest, context: GameViewerDep, session: SessionDep, viewer: ViewerDep
@@ -192,7 +198,7 @@ async def join_game(
             raise PermissionDenied("You may only add yourself to that game")
 
     profile = await session.get(PlayerProfile, player_id)
-    if profile is None:
+    if profile is None or profile.archived_at is not None:
         raise NotFound("Player profile not found")
     if profile.group_id != context.game.group_id:
         # A player profile is scoped to a group. In particular, an admin must

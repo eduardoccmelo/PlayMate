@@ -38,6 +38,15 @@ jobs:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
           SHA: ${{ github.sha }}
         run: |
+          # API mode signs users in with emailed codes; production refuses
+          # sign-in without SMTP, so fail here rather than ship a dead login.
+          if [ "$VITE_DATA_SOURCE" = api ] && \
+             { [ -z "$SMTP_HOST" ] || [ -z "$SMTP_USERNAME" ] || \
+               [ -z "$SMTP_PASSWORD" ] || [ -z "$SMTP_FROM_EMAIL" ]; }; then
+            echo "VITE_DATA_SOURCE=api requires the SMTP_* secrets" >&2
+            exit 1
+          fi
+
           # Variables are expanded here on the runner; the quoted 'ENV'
           # heredoc means the instance writes the password verbatim.
           script=$(cat <<EOF

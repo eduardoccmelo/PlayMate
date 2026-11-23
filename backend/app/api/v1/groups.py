@@ -1,13 +1,29 @@
+from uuid import UUID
+
 from fastapi import APIRouter
 
-from app.api.deps import GroupMemberDep, GroupOwnerDep, SessionDep, ViewerDep
+from app.api.deps import (
+    GroupAdminDep,
+    GroupContext,
+    GroupMemberDep,
+    GroupOwnerDep,
+    SessionDep,
+    ViewerDep,
+)
+from app.db.models import PlayerProfile
 from app.domain import groups as groups_domain
+from app.domain import players as players_domain
 from app.schemas.groups import (
     ChangePasscodeRequest,
     CreateGroupRequest,
     CreateGroupResponse,
+    CreatePlayerRequest,
     GroupResponse,
+    JoinCodeResponse,
     JoinGroupRequest,
+    PlayerResponse,
+    RenameGroupRequest,
+    UpdatePlayerRequest,
 )
 
 router = APIRouter(tags=["groups"])
@@ -97,3 +113,93 @@ async def leave_group(context: GroupMemberDep, session: SessionDep) -> None:
     await groups_domain.leave_group(
         session, group_id=context.group.id, user_id=context.viewer.user.id
     )
+
+
+@router.patch("/groups/{group_id}", response_model=GroupResponse)
+async def rename_group(
+    body: RenameGroupRequest, context: GroupAdminDep, session: SessionDep
+) -> GroupResponse:
+    group = await groups_domain.rename_group(session, group_id=context.group.id, name=body.name)
+    return GroupResponse(
+        id=group.id,
+        name=group.name,
+        public_slug=group.public_slug,
+        timezone=group.timezone,
+        role=context.membership.role,
+    )
+
+
+@router.post("/groups/{group_id}/join-code", response_model=JoinCodeResponse)
+async def rotate_join_code(context: GroupAdminDep, session: SessionDep) -> JoinCodeResponse:
+    join_code = await groups_domain.rotate_join_code(session, group_id=context.group.id)
+    return JoinCodeResponse(join_code=join_code)
+
+
+def _player_response(player: PlayerProfile, context: GroupContext) -> PlayerResponse:
+    # Participants never see skill ratings, including their own (rule:
+    # ratings come only from admin votes).
+    show_skill = context.is_admin
+    return PlayerResponse(
+        id=player.id,
+        display_name=player.display_name,
+        owner_user_id=player.owner_user_id,
+        is_guest=player.owner_user_id is None,
+        level=player.level if show_skill else None,
+        mobility=player.mobility if show_skill else None,
+        condition=player.condition,
+        position=player.field_position,
+    )
+
+
+@router.get("/groups/{group_id}/players", response_model=list[PlayerResponse])
+async def list_players(context: GroupMemberDep, session: SessionDep) -> list[PlayerResponse]:
+    players = await players_domain.list_players(session, group_id=context.group.id)
+    return [_player_response(player, context) for player in players]
+
+
+@router.post("/groups/{group_id}/players", response_model=PlayerResponse, status_code=201)
+async def create_player(
+    body: CreatePlayerRequest, context: GroupAdminDep, session: SessionDep
+) -> PlayerResponse:
+    player = await players_domain.create_guest(
+        session,
+        group_id=context.group.id,
+        display_name=body.display_name,
+        level=body.level,
+        mobility=body.mobility,
+        condition=body.condition,
+        position=body.position,
+    )
+    return _player_response(player, context)
+
+
+@router.patch("/groups/{group_id}/players/{player_id}", response_model=PlayerResponse)
+async def update_player(
+    player_id: UUID, body: UpdatePlayerRequest, context: GroupMemberDep, session: SessionDep
+) -> PlayerResponse:
+    player = await players_domain.get_player(
+        session, group_id=context.group.id, player_id=player_id
+    )
+    changes = body.model_dump(exclude_unset=True)
+    if "position" in changes:
+        changes["field_position"] = changes.pop("position")
+    # None means "not sent" for every column that cannot be cleared.
+    changes = {
+        field: value for field, value in changes.items() if value is not None or field == "level"
+    }
+    player = await players_domain.update_player(
+        session,
+        player=player,
+        changes=changes,
+        actor_user_id=context.viewer.user.id,
+        actor_is_admin=context.is_admin,
+    )
+    return _player_response(player, context)
+
+
+@router.delete("/groups/{group_id}/players/{player_id}", status_code=204)
+async def archive_player(player_id: UUID, context: GroupAdminDep, session: SessionDep) -> None:
+    player = await players_domain.get_player(
+        session, group_id=context.group.id, player_id=player_id
+    )
+    await players_domain.archive_player(session, player=player)

@@ -3,13 +3,20 @@ import { localize } from "../i18n";
 import type { Condition, CurrentUser, Mobility, Player, Position } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 
+/**
+ * `true` saves, `false` means a duplicate name, and a string is a server
+ * error message to show (API mode).
+ */
+type SaveResult = boolean | string;
+
 type PlayerDirectoryManagerProps = {
   language: "pt" | "en";
   players: Player[];
   currentUser: CurrentUser | null;
-  onAddPlayer: (player: Omit<Player, "id">) => boolean;
-  onUpdatePlayer: (player: Player) => boolean;
-  onDeletePlayer: (playerId: number) => void;
+  onAddPlayer: (player: Omit<Player, "id">) => SaveResult | Promise<SaveResult>;
+  onUpdatePlayer: (player: Player) => SaveResult | Promise<SaveResult>;
+  /** Resolves to an error message when the removal was refused. */
+  onDeletePlayer: (playerId: number) => void | Promise<string | void>;
 };
 
 const emptyPlayer = {
@@ -33,6 +40,7 @@ export function PlayerDirectoryManager({
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
   const [message, setMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [formError, setFormError] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
 
@@ -42,11 +50,11 @@ export function PlayerDirectoryManager({
     setDraft(emptyPlayer);
     setFormError("");
   };
-  const savePlayer = (event: FormEvent) => {
+  const savePlayer = async (event: FormEvent) => {
     event.preventDefault();
     const name = draft.name.trim();
     const isSavingOwnPlayer = Boolean(editingPlayer && ownsPlayer(editingPlayer));
-    const saved = editingPlayer
+    const saved = await (editingPlayer
       ? onUpdatePlayer({
           ...editingPlayer,
           ...draft,
@@ -59,25 +67,26 @@ export function PlayerDirectoryManager({
             : {}),
           name,
         })
-      : onAddPlayer({ ...draft, name });
+      : onAddPlayer({ ...draft, name }));
+    if (typeof saved === "string") {
+      setFormError(saved);
+      return;
+    }
     if (!saved) {
       // The only rejection reason today is a duplicate name in the directory.
       setFormError("Esse nome já está na lista.");
       return;
     }
 
+    setDeleteError("");
     setMessage(
       `${name} ${localize(editingPlayer ? "foi atualizado." : "foi adicionado.", language)}`,
     );
     closeModal();
   };
   const ownsPlayer = (player: Player) =>
-    Boolean(
-      currentUser &&
-        (player.ownerUserId === currentUser.id ||
-          player.name.trim().toLocaleLowerCase() ===
-            currentUser.displayName.trim().toLocaleLowerCase()),
-    );
+    // Account identity, never an equal display name, grants ownership.
+    Boolean(currentUser && player.ownerUserId === currentUser.id);
   const sortedPlayers = [...players].sort((first, second) => {
     if (ownsPlayer(first) !== ownsPlayer(second)) return ownsPlayer(first) ? -1 : 1;
     return first.name.localeCompare(second.name, language === "pt" ? "pt-BR" : "en");
@@ -100,6 +109,7 @@ export function PlayerDirectoryManager({
           className="session-action-button edit directory-add-button"
           onClick={() => {
             setMessage("");
+            setDeleteError("");
             setDraft(emptyPlayer);
             setEditingPlayer(null);
             setMode("add");
@@ -138,6 +148,7 @@ export function PlayerDirectoryManager({
                 className="session-action-button edit"
                 onClick={() => {
                   setMessage("");
+                  setDeleteError("");
                   setDraft({
                     name: player.name,
                     level: player.level,
@@ -171,6 +182,11 @@ export function PlayerDirectoryManager({
         )}
       </div>
       {message && <p className="success directory-message">✓ {message}</p>}
+      {deleteError && (
+        <p className="error directory-message" role="alert">
+          {localize(deleteError, language)}
+        </p>
+      )}
 
       {mode && (
         <div className="modal-backdrop" role="presentation">
@@ -302,12 +318,14 @@ export function PlayerDirectoryManager({
         <ConfirmDialog
           language={language}
           onCancel={() => setPlayerToDelete(null)}
-          onConfirm={() => {
-            onDeletePlayer(playerToDelete.id);
-            setMessage(
-              `${playerToDelete.name} ${localize("foi deletado.", language)}`,
-            );
+          onConfirm={async () => {
+            const target = playerToDelete;
             setPlayerToDelete(null);
+            const error = await onDeletePlayer(target.id);
+            setDeleteError(error ?? "");
+            setMessage(
+              error ? "" : `${target.name} ${localize("foi deletado.", language)}`,
+            );
           }}
         />
       )}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiRepository } from "./apiRepository";
+import { apiJoinCodes, apiRepository } from "./apiRepository";
 
 describe("apiRepository groups and games", () => {
   afterEach(() => {
@@ -69,6 +69,45 @@ describe("apiRepository groups and games", () => {
           Authorization: "Bearer session-token",
         }),
       }),
+    );
+  });
+
+  it("rotates a group join code and remembers it on this device", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ joinCode: "WXYZ2345" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    });
+
+    const { joinCode } = await apiRepository.rotateJoinCode("session-token", "group-id");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/groups/group-id/join-code",
+      expect.objectContaining({ method: "POST" }),
+    );
+    apiJoinCodes.save("group-id", joinCode);
+    expect(apiJoinCodes.read("group-id")).toBe("WXYZ2345");
+    apiJoinCodes.clear();
+    expect(apiJoinCodes.read("group-id")).toBeUndefined();
+  });
+
+  it("archives a directory player with DELETE and no body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      apiRepository.archivePlayer("session-token", "group-id", "player-id"),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/groups/group-id/players/player-id",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 });

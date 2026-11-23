@@ -45,6 +45,9 @@ class UpdateGameRequest(CamelModel):
 class ParticipantResponse(CamelModel):
     id: UUID
     player_id: UUID
+    #: The account that owns this entry; None for manual guests. Clients use
+    #: this, never the display name, to find the viewer's own entry.
+    user_id: UUID | None
     display_name: str
     status: ParticipantStatus
     list_position: int | None
@@ -75,6 +78,7 @@ class GameResponse(CamelModel):
     teams_drawn_at: datetime | None
     team_a_score: Decimal | None
     team_b_score: Decimal | None
+    created_by_user_id: UUID
 
 
 class ViewerAccessResponse(CamelModel):

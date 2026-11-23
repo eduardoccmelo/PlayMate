@@ -45,11 +45,14 @@ export type ApiGame = {
   cancelReason: "manual" | "min_players" | null;
   paymentInfo: string;
   playerNotice: string;
+  createdByUserId: string;
 };
 
 export type ApiParticipant = {
   id: string;
   playerId: string;
+  /** Owning account; null for manual guests. Never infer ownership from names. */
+  userId: string | null;
   displayName: string;
   status: "confirmed" | "waiting_list" | "left" | "removed";
   listPosition: number | null;
@@ -87,6 +90,26 @@ export type ApiGameDraft = {
   autoCancellationHours?: number | null;
   paymentInfo: string;
   playerNotice: string;
+};
+
+export type ApiPlayer = {
+  id: string;
+  displayName: string;
+  ownerUserId: string | null;
+  isGuest: boolean;
+  /** Withheld (null) for non-admin viewers. */
+  level: number | null;
+  mobility: "rapido" | "neutro" | "lento" | null;
+  condition: "boa" | "neutro" | "ruim";
+  position: "goleiro" | "defesa" | "ataque" | "neutro";
+};
+
+export type ApiPlayerDraft = {
+  displayName?: string;
+  level?: number | null;
+  mobility?: NonNullable<ApiPlayer["mobility"]>;
+  condition?: ApiPlayer["condition"];
+  position?: ApiPlayer["position"];
 };
 
 const withToken = (token: string): HeadersInit => ({
@@ -157,6 +180,44 @@ export const apiRepository = {
       headers: withToken(token),
       body: JSON.stringify({ currentPasscode, newPasscode }),
     }),
+  renameGroup: (token: string, groupId: string, name: string) =>
+    apiFetch<ApiGroup>(`/v1/groups/${groupId}`, {
+      method: "PATCH",
+      headers: withToken(token),
+      body: JSON.stringify({ name }),
+    }),
+  /** The server keeps only a hash, so sharing again issues a fresh code. */
+  rotateJoinCode: (token: string, groupId: string) =>
+    apiFetch<{ joinCode: string }>(`/v1/groups/${groupId}/join-code`, {
+      method: "POST",
+      headers: withToken(token),
+    }),
+  listPlayers: (token: string, groupId: string) =>
+    apiFetch<ApiPlayer[]>(`/v1/groups/${groupId}/players`, {
+      headers: withToken(token),
+    }),
+  createPlayer: (token: string, groupId: string, player: ApiPlayerDraft) =>
+    apiFetch<ApiPlayer>(`/v1/groups/${groupId}/players`, {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify(player),
+    }),
+  updatePlayer: (
+    token: string,
+    groupId: string,
+    playerId: string,
+    changes: ApiPlayerDraft,
+  ) =>
+    apiFetch<ApiPlayer>(`/v1/groups/${groupId}/players/${playerId}`, {
+      method: "PATCH",
+      headers: withToken(token),
+      body: JSON.stringify(changes),
+    }),
+  archivePlayer: (token: string, groupId: string, playerId: string) =>
+    apiFetch<void>(`/v1/groups/${groupId}/players/${playerId}`, {
+      method: "DELETE",
+      headers: withToken(token),
+    }),
   leaveGroup: (token: string, groupId: string) =>
     apiFetch<void>(`/v1/groups/${groupId}/leave`, {
       method: "POST",
@@ -184,6 +245,11 @@ export const apiRepository = {
       method: "PATCH",
       headers: withToken(token),
       body: JSON.stringify(changes),
+    }),
+  deleteGame: (token: string, gameId: string) =>
+    apiFetch<void>(`/v1/games/${gameId}`, {
+      method: "DELETE",
+      headers: withToken(token),
     }),
   cancelGame: (token: string, gameId: string, reason: "manual" | "min_players") =>
     apiFetch<ApiGame>(`/v1/games/${gameId}/cancel`, {
@@ -233,4 +299,22 @@ export const apiRepository = {
   readSession: () => getStoredValue<ApiSession | null>(SESSION_KEY, null),
   saveSession: (session: ApiSession) => saveStoredValue(SESSION_KEY, session),
   clearSession: () => saveStoredValue<ApiSession | null>(SESSION_KEY, null),
+};
+
+const JOIN_CODES_KEY = "playmate.api-join-codes.v1";
+
+/**
+ * The server stores only a hash of each group's join code and returns the
+ * plain code once (on creation or rotation). Keep the last one this device
+ * received so an admin can share it again without invalidating it.
+ */
+export const apiJoinCodes = {
+  read: (groupId: string) =>
+    getStoredValue<Record<string, string>>(JOIN_CODES_KEY, {})[groupId],
+  save: (groupId: string, joinCode: string) =>
+    saveStoredValue(JOIN_CODES_KEY, {
+      ...getStoredValue<Record<string, string>>(JOIN_CODES_KEY, {}),
+      [groupId]: joinCode,
+    }),
+  clear: () => saveStoredValue<Record<string, string>>(JOIN_CODES_KEY, {}),
 };
