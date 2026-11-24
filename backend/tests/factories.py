@@ -35,8 +35,14 @@ async def make_player(
 
 
 async def make_game(
-    session: AsyncSession, group_id: UUID, creator_id: UUID, max_players: int = 4
+    session: AsyncSession,
+    group_id: UUID,
+    creator_id: UUID,
+    max_players: int = 4,
+    payment_tracking_enabled: bool = True,
 ):
+    # Tracking defaults on: the roster tests exercise payment ordering, and
+    # payment changes are refused on a game without tracking.
     created = await games_domain.create_game(
         session,
         group_id=group_id,
@@ -45,5 +51,6 @@ async def make_game(
         start_time=time(19),
         duration_minutes=75,
         max_players=max_players,
+        payment_tracking_enabled=payment_tracking_enabled,
     )
     return created.game

@@ -11,6 +11,7 @@ be checked at COMMIT.
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -72,11 +73,31 @@ async def _active_lists(
     return confirmed, waiting
 
 
-def _entries(rows: list[GameParticipant]) -> list[ListEntry]:
+def is_overdue(row: GameParticipant, now: datetime) -> bool:
+    return (
+        row.paid_at is None
+        and row.payment_due_at is not None
+        and row.payment_due_at <= now
+    )
+
+
+def _entries(rows: list[GameParticipant], now: datetime) -> list[ListEntry]:
     return [
-        ListEntry(id=row.id, paid=row.paid_at is not None, position=row.list_position)
+        ListEntry(
+            id=row.id,
+            paid=row.paid_at is not None,
+            position=row.list_position,
+            overdue=is_overdue(row, now),
+        )
         for row in rows
     ]
+
+
+def due_at_for(game: Game, now: datetime) -> datetime | None:
+    """The individual deadline a new entry gets, if the game has one."""
+    if not game.payment_tracking_enabled or game.payment_deadline_days is None:
+        return None
+    return now + timedelta(days=game.payment_deadline_days)
 
 
 async def _settle_lists(
@@ -87,8 +108,9 @@ async def _settle_lists(
 ) -> tuple[list[GameParticipant], list[GameParticipant]]:
     """Apply the pure ordering rules and write the result back."""
     by_id = {row.id: row for row in [*confirmed, *waiting]}
+    now = utcnow()
     new_confirmed, new_waiting, promoted, overflowed = settle(
-        _entries(confirmed), _entries(waiting), game.max_players
+        _entries(confirmed, now), _entries(waiting, now), game.max_players
     )
 
     for entry in new_confirmed:
@@ -164,6 +186,10 @@ async def join_game(
             list_position=len(waiting),
         )
         session.add(participant)
+
+    # Keep an earlier deadline on rejoin, so leaving cannot reset it.
+    if participant.payment_due_at is None:
+        participant.payment_due_at = due_at_for(game, utcnow())
 
     has_room = len(confirmed) < game.max_players
     participant.status = (
@@ -252,6 +278,8 @@ async def set_payment(
 ) -> RosterChange:
     """Rule 14. A payment change re-sorts the stored roster, paid first."""
     game = await lock_game(session, game_id)
+    if not game.payment_tracking_enabled:
+        raise Conflict("Payment tracking is off for this game")
     confirmed, waiting = await _active_lists(session, game_id)
 
     participant = next(
@@ -327,3 +355,64 @@ async def resettle_after_capacity_change(
             payload={"displayName": row.display_name_snapshot},
         )
     return RosterChange(participant=None, promoted=promoted, overflowed=overflowed)
+
+
+async def apply_payment_settings(session: AsyncSession, *, game_id: UUID) -> RosterChange:
+    """Bring every entry in line with the game's current payment settings.
+
+    Tracking off clears payment marks and deadlines. A deadline that is
+    switched on gives every active entry without one its own due instant;
+    switching the deadline off clears them. Then the lists are re-settled,
+    which demotes anyone already overdue.
+    """
+    game = await lock_game(session, game_id)
+    confirmed, waiting = await _active_lists(session, game_id)
+    now = utcnow()
+    for row in [*confirmed, *waiting]:
+        if not game.payment_tracking_enabled:
+            row.paid_at = None
+            row.payment_due_at = None
+        elif game.payment_deadline_days is None:
+            row.payment_due_at = None
+        elif row.payment_due_at is None:
+            row.payment_due_at = due_at_for(game, now)
+    await session.flush()
+    promoted, overflowed = await _settle_lists(session, game, confirmed, waiting)
+    for row in promoted:
+        await notify_group_admins(
+            session,
+            group_id=game.group_id,
+            game_id=game.id,
+            type=NotificationType.WAITING_LIST_PROMOTED,
+            player_id=row.player_id,
+            payload={"displayName": row.display_name_snapshot},
+        )
+    return RosterChange(participant=None, promoted=promoted, overflowed=overflowed)
+
+
+async def sweep_payment_deadlines(session: AsyncSession, *, game_id: UUID) -> None:
+    """Apply deadlines that passed since the last write to this game.
+
+    docs/backend-schema.md describes a scheduled worker for this. Until one
+    exists, every read of a game's lists calls this first, so nobody ever
+    sees an overdue player still on the roster. It locks the game only when
+    there is something to move.
+    """
+    overdue = (
+        await session.execute(
+            select(GameParticipant.id)
+            .where(
+                GameParticipant.game_id == game_id,
+                GameParticipant.status == ParticipantStatus.CONFIRMED,
+                GameParticipant.paid_at.is_(None),
+                GameParticipant.payment_due_at <= utcnow(),
+            )
+            .limit(1)
+        )
+    ).first()
+    if overdue is None:
+        return
+    game = await lock_game(session, game_id)
+    if game.status is not GameStatus.ACTIVE:
+        return
+    await resettle_after_capacity_change(session, game_id=game_id)

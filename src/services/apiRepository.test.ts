@@ -53,6 +53,8 @@ describe("apiRepository groups and games", () => {
       courtNumber: "2",
       courtCostCents: 5000,
       currency: "EUR" as const,
+      paymentTrackingEnabled: true,
+      paymentDeadlineDays: 3,
       paymentInfo: "",
       playerNotice: "",
     };

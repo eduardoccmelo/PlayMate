@@ -135,6 +135,10 @@ export const translations: Record<
     Excluir: "Delete",
     Cancelar: "Cancel",
     Fechar: "Close",
+    "O balanceamento de times ainda não está disponível nesta versão. Ele voltará quando os times forem salvos no servidor.":
+      "Team balancing is not available in this version yet. It will return once teams are saved on the server.",
+    "A votação de atributos ainda não está disponível nesta versão. Ela voltará quando os votos forem salvos no servidor.":
+      "Skill voting is not available in this version yet. It will return once votes are saved on the server.",
     "Entre na sua conta para salvar o jogador.":
       "Sign in to save the player.",
     "Este jogador não está vinculado ao servidor.":

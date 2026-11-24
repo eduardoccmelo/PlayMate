@@ -35,8 +35,18 @@ router = APIRouter(tags=["games"])
 #: Fields a PATCH may change without touching the schedule.
 PLAIN_GAME_FIELDS = (
     "location", "court_number", "court_cost_cents", "min_players",
-    "payment_info", "player_notice",
+    "payment_info", "player_notice", "payment_deadline_days",
 )
+#: Changing any of these re-applies payment marks and deadlines to the lists.
+PAYMENT_FIELDS = ("payment_tracking_enabled", "payment_deadline_days")
+
+
+def _normalize_payment_fields(game: Game) -> None:
+    """Payment details and a deadline exist only while tracking is on
+    (enforced by a check constraint as well)."""
+    if not game.payment_tracking_enabled:
+        game.payment_info = ""
+        game.payment_deadline_days = None
 #: Changing any of these forces starts_at/ends_at to be recomputed.
 SCHEDULE_FIELDS = ("game_date", "start_time", "duration_minutes")
 
@@ -50,6 +60,7 @@ def _participant_response(row: GameParticipant) -> ParticipantResponse:
         status=row.status,
         list_position=row.list_position,
         paid=row.paid_at is not None,
+        payment_due_at=row.payment_due_at,
         team=row.team,
     )
 
@@ -93,6 +104,7 @@ async def list_games(context: GroupMemberDep, session: SessionDep) -> list[GameR
 async def create_game(
     body: CreateGameRequest, context: GroupAdminDep, session: SessionDep
 ) -> CreateGameResponse:
+    tracking = body.payment_tracking_enabled
     created = await games_domain.create_game(
         session,
         group_id=context.group.id,
@@ -107,7 +119,9 @@ async def create_game(
         court_cost_cents=body.court_cost_cents,
         currency=body.currency,
         auto_cancellation_hours=body.auto_cancellation_hours,
-        payment_info=body.payment_info,
+        payment_tracking_enabled=tracking,
+        payment_deadline_days=body.payment_deadline_days if tracking else None,
+        payment_info=body.payment_info if tracking else "",
         player_notice=body.player_notice,
     )
     return CreateGameResponse(
@@ -117,6 +131,7 @@ async def create_game(
 
 @router.get("/games/{game_id}", response_model=GameDetailResponse)
 async def read_game(context: GameViewerDep, session: SessionDep) -> GameDetailResponse:
+    await participants_domain.sweep_payment_deadlines(session, game_id=context.game.id)
     confirmed, waiting = await _lists(session, context.game.id)
     return GameDetailResponse(
         game=GameResponse.model_validate(context.game),
@@ -136,6 +151,9 @@ async def update_game(
     for field in PLAIN_GAME_FIELDS:
         if field in changes:
             setattr(game, field, changes[field])
+    if changes.get("payment_tracking_enabled") is not None:
+        game.payment_tracking_enabled = changes["payment_tracking_enabled"]
+    _normalize_payment_fields(game)
 
     if any(field in changes for field in SCHEDULE_FIELDS):
         for field in SCHEDULE_FIELDS:
@@ -150,6 +168,10 @@ async def update_game(
         await session.flush()
         # Rule 13: a shrink pushes the roster tail to the waiting-list front.
         await participants_domain.resettle_after_capacity_change(session, game_id=game.id)
+
+    if any(field in changes for field in PAYMENT_FIELDS):
+        await session.flush()
+        await participants_domain.apply_payment_settings(session, game_id=game.id)
 
     await session.flush()
     return GameResponse.model_validate(game)

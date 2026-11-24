@@ -815,6 +815,9 @@ export function PlayMateApp() {
       previousGame.maxPlayers !== nextGame.maxPlayers ||
       previousGame.minPlayers !== nextGame.minPlayers ||
       previousGame.paymentInfo !== nextGame.paymentInfo ||
+      hasPaymentTracking(previousGame) !== hasPaymentTracking(nextGame) ||
+      (previousGame.paymentDeadlineDays ?? null) !==
+        (nextGame.paymentDeadlineDays ?? null) ||
       previousGame.disclaimer !== nextGame.disclaimer;
     if (!previousGame.cancelled && nextGame.cancelled) {
       await apiRepository.cancelGame(session.token, gameId, "manual");
@@ -829,7 +832,11 @@ export function PlayMateApp() {
         location: nextGame.location,
         courtNumber: nextGame.courtNumber,
         courtCostCents: Math.round(nextGame.courtCost * 100),
-        paymentInfo: nextGame.paymentInfo,
+        paymentTrackingEnabled: hasPaymentTracking(nextGame),
+        paymentDeadlineDays: hasPaymentTracking(nextGame)
+          ? (nextGame.paymentDeadlineDays ?? null)
+          : null,
+        paymentInfo: hasPaymentTracking(nextGame) ? nextGame.paymentInfo : "",
         playerNotice: nextGame.disclaimer,
       });
       requested = true;
@@ -894,6 +901,8 @@ export function PlayMateApp() {
     if (requested) await refreshApiGroups();
   };
   useEffect(() => {
+    // The server promotes from the waiting list inside each roster change.
+    if (runtimeConfig.dataSource === "api") return;
     const hasOpenSpotWithWaitingPlayer = games.some(
       (gameSession) =>
         gameSession.playerIds.length < gameSession.maxPlayers &&
@@ -915,6 +924,17 @@ export function PlayMateApp() {
     );
   }, [fillOpenSpots, games, players, refreshTeams, setGames]);
   useEffect(() => {
+    if (runtimeConfig.dataSource === "api") {
+      // The server moves overdue players when a game is read; fetch it again
+      // once a confirmed player's deadline has passed on this clock.
+      const anyOverdue = games.some((gameSession) =>
+        gameSession.playerIds.some((playerId) =>
+          isPaymentOverdue(gameSession, playerId, clock),
+        ),
+      );
+      if (anyOverdue) void refreshApiGroups().catch(() => undefined);
+      return;
+    }
     const nextGames = games.map((gameSession) => {
       if (!hasPaymentTracking(gameSession) || !gameSession.paymentDeadlineDays)
         return gameSession;
@@ -939,7 +959,7 @@ export function PlayMateApp() {
     });
     if (nextGames.some((entry, index) => entry !== games[index]))
       setGames(nextGames);
-  }, [clock, fillOpenSpots, games, refreshTeams, setGames]);
+  }, [clock, fillOpenSpots, games, refreshApiGroups, refreshTeams, setGames]);
   const updateGame = (
     gameSession: GameSession,
     shouldRefreshTeams = true,
@@ -1069,6 +1089,10 @@ export function PlayMateApp() {
         courtCostCents: Math.round(Number(gameForm.courtCost) * 100),
         currency: gameForm.currency,
         autoCancellationHours: 2,
+        paymentTrackingEnabled: gameForm.paymentTrackingEnabled,
+        paymentDeadlineDays: gameForm.paymentTrackingEnabled
+          ? gameForm.paymentDeadlineDays
+          : null,
         paymentInfo: gameForm.paymentTrackingEnabled ? gameForm.paymentInfo : "",
         playerNotice: gameForm.disclaimer,
       } as const;
@@ -3190,6 +3214,17 @@ export function PlayMateApp() {
             </section>
             <aside className="side-column">
               <section className="teams-section team-balance-panel">
+                {runtimeConfig.dataSource === "api" ? (
+                  // Draws and their 3+1 quota are not stored on the server yet, so a
+                  // local draw would vanish on reload and could reset the quota.
+                  <p className="balance-info-box balance-unavailable">
+                    {localize(
+                      "O balanceamento de times ainda não está disponível nesta versão. Ele voltará quando os times forem salvos no servidor.",
+                      language,
+                    )}
+                  </p>
+                ) : (
+                  <>
                 <p className="balance-info-box">
                   {localize(
                     "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.",
@@ -3316,6 +3351,8 @@ export function PlayMateApp() {
                     language={language}
                     showPositions={!isParticipantGameManager}
                   />
+                )}
+                  </>
                 )}
               </section>
             </aside>

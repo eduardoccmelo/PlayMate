@@ -37,8 +37,15 @@ export const gameFromApi = (detail: ApiGameDetail): GameSession => {
     minPlayers: game.minPlayers,
     cancellationHours: null,
     cancelled: game.status === "cancelled",
-    // The server has no separate flag yet; payment details imply tracking.
-    paymentTrackingEnabled: Boolean(game.paymentInfo),
+    paymentTrackingEnabled: game.paymentTrackingEnabled,
+    paymentDeadlineDays: game.paymentDeadlineDays,
+    paymentDueAtByPlayerId: Object.fromEntries(
+      [...confirmed, ...waiting].flatMap((participant) =>
+        participant.paymentDueAt
+          ? [[localIdForApi(participant.playerId), participant.paymentDueAt]]
+          : [],
+      ),
+    ),
     paymentInfo: game.paymentInfo,
     disclaimer: game.playerNotice,
     playerIds: confirmed.map((participant) => localIdForApi(participant.playerId)),

@@ -312,7 +312,7 @@ create unique index game_participants_active_name_unique_idx
   where status in ('confirmed', 'waiting_list');
 ~~~
 
-Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. When `payment_tracking_enabled` and `payment_deadline_days` are set, insert `payment_due_at = now() + deadline` for every new participant. A scheduled worker moves an unpaid confirmed row whose due instant has passed to `waiting_list`; it must not auto-promote an overdue unpaid row back to confirmed. A player leaves only their own entry and does so immediately; an admin may remove another player only from game management. Payment routes and bulk **All paid** are rejected when payment tracking is disabled.
+Joining must be transactional: lock the game row, count confirmed players, insert as confirmed or waiting_list, create notifications, then commit. When `payment_tracking_enabled` and `payment_deadline_days` are set, insert `payment_due_at = now() + deadline` for every new participant. A scheduled worker moves an unpaid confirmed row whose due instant has passed to `waiting_list`; it must not auto-promote an overdue unpaid row back to confirmed. *Implemented (migration `0003_payment_tracking`) without a worker for now: every roster change re-settles the lists with overdue rows demoted, and reading a game first sweeps passed deadlines (`sweep_payment_deadlines`). A worker remains useful for notifying players without anyone opening the game.* A player leaves only their own entry and does so immediately; an admin may remove another player only from game management. Payment routes and bulk **All paid** are rejected when payment tracking is disabled.
 
 ### Participation statistics
 

@@ -11,6 +11,10 @@ append to the tail.
 
 Rule 14 - the roster is stored paid-first, preserving relative order within
 the paid and unpaid blocks. This is a stored order, not a display sort.
+
+Payment deadline (docs/backend-schema.md, `game_participants`) - an unpaid
+confirmed entry whose due instant has passed moves to the waiting-list tail,
+and an overdue entry is never auto-promoted while it stays unpaid.
 """
 
 from dataclasses import dataclass, replace
@@ -24,7 +28,9 @@ class ListEntry:
     id: UUID
     paid: bool = False
     position: int | None = None
-
+    #: Unpaid past its payment deadline. Callers compute this; it is never
+    #: true for a paid entry.
+    overdue: bool = False
 
 
 def renumber[E: ListEntry](entries: list[E]) -> list[E]:
@@ -47,17 +53,36 @@ def overflow_to_front[E: ListEntry](waiting: list[E], overflow: list[E]) -> list
     return [*overflow, *waiting]
 
 
+def demote_overdue[E: ListEntry](
+    confirmed: list[E], waiting: list[E]
+) -> tuple[list[E], list[E], list[E]]:
+    """Move overdue confirmed entries to the waiting-list tail, keeping their
+    relative order. Returns (confirmed, waiting, demoted)."""
+    demoted = [entry for entry in confirmed if entry.overdue]
+    if not demoted:
+        return confirmed, waiting, []
+    kept = [entry for entry in confirmed if not entry.overdue]
+    return kept, [*waiting, *demoted], demoted
+
+
 def promote_from_head[E: ListEntry](
     confirmed: list[E], waiting: list[E], max_players: int
 ) -> tuple[list[E], list[E], list[E]]:
-    """Fill free roster slots from the head of the waiting list.
+    """Fill free roster slots from the head of the waiting list, skipping
+    overdue entries (they keep their place in the queue).
 
     Returns (confirmed, waiting, promoted) - `promoted` is what the caller
     must notify about and flip to `confirmed`.
     """
     free_slots = max(max_players - len(confirmed), 0)
-    promoted = waiting[:free_slots]
-    return [*confirmed, *promoted], waiting[free_slots:], promoted
+    promoted: list[E] = []
+    remaining: list[E] = []
+    for entry in waiting:
+        if len(promoted) < free_slots and not entry.overdue:
+            promoted.append(entry)
+        else:
+            remaining.append(entry)
+    return [*confirmed, *promoted], remaining, promoted
 
 
 def shrink_to_capacity[E: ListEntry](
@@ -79,12 +104,15 @@ def settle[E: ListEntry](
 ) -> tuple[list[E], list[E], list[E], list[E]]:
     """Bring both lists to a legal state and renumber them.
 
-    Applies, in order: paid-first on the roster (14), shrink overflow to the
-    waiting-list front (13), promote from the head into any free slot (13),
-    then contiguous renumbering of both lists.
+    Applies, in order: overdue entries to the waiting-list tail (payment
+    deadline), paid-first on the roster (14), shrink overflow to the
+    waiting-list front (13), promote non-overdue entries from the head into
+    any free slot (13), then contiguous renumbering of both lists.
 
-    Returns (confirmed, waiting, promoted, overflow).
+    Returns (confirmed, waiting, promoted, overflow). Demoted overdue entries
+    are not reported separately; they simply end up in `waiting`.
     """
+    confirmed, waiting, _ = demote_overdue(confirmed, waiting)
     confirmed = paid_first(confirmed)
     confirmed, waiting, overflow = shrink_to_capacity(confirmed, waiting, max_players)
     confirmed, waiting, promoted = promote_from_head(confirmed, waiting, max_players)

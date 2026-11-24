@@ -22,6 +22,7 @@ const participant = (overrides: Partial<ApiParticipant>): ApiParticipant => ({
   status: "confirmed",
   listPosition: 0,
   paid: false,
+  paymentDueAt: null,
   team: null,
   ...overrides,
 });
@@ -46,6 +47,8 @@ const detail = (
     minPlayers: null,
     status: "active",
     cancelReason: null,
+    paymentTrackingEnabled: false,
+    paymentDeadlineDays: null,
     paymentInfo: "",
     playerNotice: "",
     createdByUserId: "user-admin",
@@ -97,6 +100,32 @@ describe("gameFromApi", () => {
     expect(game.waitlistIds).toEqual([c]);
     expect(game.paidPlayerIds).toEqual([a]);
     expect(game.apiParticipantIdsByPlayerId).toEqual({ [a]: "p-a", [b]: "p-b", [c]: "p-c" });
+  });
+});
+
+describe("gameFromApi payment settings", () => {
+  it("keeps tracking on without payment details (PR #10 review)", () => {
+    const base = detail([
+      participant({
+        playerId: "aaaaaaaa-0000-0000-0000-000000000000",
+        paymentDueAt: "2026-12-03T19:00:00Z",
+      }),
+      participant({ id: "p-2", playerId: "bbbbbbbb-0000-0000-0000-000000000000" }),
+    ]);
+    const game = gameFromApi({
+      ...base,
+      game: { ...base.game, paymentTrackingEnabled: true, paymentDeadlineDays: 2 },
+    });
+    expect(game.paymentTrackingEnabled).toBe(true);
+    expect(game.paymentDeadlineDays).toBe(2);
+    expect(game.paymentInfo).toBe("");
+    expect(game.paymentDueAtByPlayerId).toEqual({
+      [localIdForApi("aaaaaaaa-0000-0000-0000-000000000000")]: "2026-12-03T19:00:00Z",
+    });
+  });
+
+  it("reports tracking off even when the game is otherwise identical", () => {
+    expect(gameFromApi(detail([])).paymentTrackingEnabled).toBe(false);
   });
 });
 

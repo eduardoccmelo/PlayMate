@@ -1,4 +1,5 @@
 import { Fragment, useState, type FormEvent } from "react";
+import { runtimeConfig } from "../config/runtime";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser, GameSession, PlayerGroup } from "../types";
 import { hasGameEnded, normalizeText, weekdayName } from "../utils/game";
@@ -634,14 +635,17 @@ export function GroupSelector({
                 )}
               </h1>
             </div>
-            <div className="game-directory-actions">
-              <button
-                className="secondary"
-                onClick={() => setIsAddingGame(true)}
-              >
-                {localize("Tenho um código de jogo", language)}
-              </button>
-            </div>
+            {/* Single-game guest access is not on the server yet (API mode). */}
+            {runtimeConfig.dataSource !== "api" && (
+              <div className="game-directory-actions">
+                <button
+                  className="secondary"
+                  onClick={() => setIsAddingGame(true)}
+                >
+                  {localize("Tenho um código de jogo", language)}
+                </button>
+              </div>
+            )}
           </div>
           <section className="panel group-list my-games-list">
             {myGames.length ? (

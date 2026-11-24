@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Computed,
     Date,
@@ -57,6 +58,15 @@ class Game(Base):
         CheckConstraint(
             "(teams_drawn_at IS NULL) OR (team_a_score IS NOT NULL AND team_b_score IS NOT NULL)",
             name="scores_require_draw",
+        ),
+        CheckConstraint(
+            "payment_deadline_days IS NULL OR payment_deadline_days BETWEEN 1 AND 7",
+            name="payment_deadline_range",
+        ),
+        CheckConstraint(
+            "payment_tracking_enabled"
+            " OR (payment_deadline_days IS NULL AND payment_info = '')",
+            name="payment_fields_require_tracking",
         ),
         Index("games_group_start_idx", "group_id", "game_date", "start_time"),
         Index(
@@ -114,6 +124,11 @@ class Game(Base):
         pg_enum(CancelReason, "cancel_reason")
     )
 
+    #: Migration 0003. Payment details and the deadline require tracking.
+    payment_tracking_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
+    )
+    payment_deadline_days: Mapped[int | None] = mapped_column(SmallInteger)
     payment_info: Mapped[str] = mapped_column(Text, server_default=text("''"), nullable=False)
     player_notice: Mapped[str] = mapped_column(Text, server_default=text("''"), nullable=False)
 
@@ -185,6 +200,10 @@ class GameParticipant(Base):
     )
     list_position: Mapped[int | None] = mapped_column(Integer)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Set on joining a game with a payment deadline. An unpaid confirmed
+    #: entry past this instant moves to the waiting list and is never
+    #: auto-promoted while it stays overdue.
+    payment_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     team: Mapped[TeamSide | None] = mapped_column(pg_enum(TeamSide, "team_side"))
     level_at_draw: Mapped[int | None] = mapped_column(SmallInteger)
     joined_at: Mapped[datetime] = created_at_column()

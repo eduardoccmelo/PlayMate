@@ -43,6 +43,9 @@ export type ApiGame = {
   minPlayers: number | null;
   status: "active" | "cancelled" | "finished" | "deleted";
   cancelReason: "manual" | "min_players" | null;
+  paymentTrackingEnabled: boolean;
+  /** 1-7 days each new entry has to pay; null without a deadline. */
+  paymentDeadlineDays: number | null;
   paymentInfo: string;
   playerNotice: string;
   createdByUserId: string;
@@ -57,6 +60,8 @@ export type ApiParticipant = {
   status: "confirmed" | "waiting_list" | "left" | "removed";
   listPosition: number | null;
   paid: boolean;
+  /** This entry's own payment deadline (ISO instant), if the game has one. */
+  paymentDueAt: string | null;
   team: "A" | "B" | null;
 };
 
@@ -88,6 +93,8 @@ export type ApiGameDraft = {
   courtCostCents: number;
   currency: ApiGame["currency"];
   autoCancellationHours?: number | null;
+  paymentTrackingEnabled: boolean;
+  paymentDeadlineDays: number | null;
   paymentInfo: string;
   playerNotice: string;
 };
