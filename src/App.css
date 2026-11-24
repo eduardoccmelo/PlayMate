@@ -3448,3 +3448,25 @@ header {
     min-width: 0;
   }
 }
+/* API mode: a failed server write, shown above every page until dismissed. */
+.sync-error {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fbe9e7;
+  color: #b83a2c;
+  border-bottom: 1px solid #f0c4bd;
+}
+.sync-error button {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}

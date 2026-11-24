@@ -164,6 +164,25 @@ async def join_group(
     return membership
 
 
+async def rename_group(session: AsyncSession, *, group_id: UUID, name: str) -> Group:
+    group = await get_group(session, group_id)
+    group.name = name.strip()
+    await session.flush()
+    return group
+
+
+async def rotate_join_code(session: AsyncSession, *, group_id: UUID) -> str:
+    """Only the hash of a join code is stored, so an admin who needs to share
+    the group again gets a fresh code. Existing memberships are unaffected;
+    the previous code simply stops working."""
+    group = await get_group(session, group_id)
+    join_code = generate_code(JOIN_CODE_LENGTH)
+    group.join_code_hash = hash_token(join_code)
+    group.join_code_prefix = _code_prefix(join_code)
+    await session.flush()
+    return join_code
+
+
 async def change_passcode(
     session: AsyncSession, *, group_id: UUID, current_passcode: str, new_passcode: str
 ) -> None:

@@ -42,6 +42,22 @@ export const browserAppRepository = {
       activeGroupId: getStoredValue<string | null>(keys.activeGroupId, null),
     };
   },
+  /**
+   * API mode: the server owns groups, games and identity, so only device
+   * preferences come from storage. Stale browser-mode data is not shown.
+   */
+  loadPreferences(): BrowserAppState {
+    return {
+      languagePreference: getStoredValue(keys.languagePreference, null),
+      groups: [],
+      currentUser: null,
+      savedProfiles: {},
+      activeGroupId: null,
+    };
+  },
+  savePreferences(state: Pick<BrowserAppState, "languagePreference">) {
+    saveStoredValue(keys.languagePreference, state.languagePreference);
+  },
   save(state: BrowserAppState) {
     saveStoredValue(keys.languagePreference, state.languagePreference);
     saveStoredValue(keys.groups, state.groups);

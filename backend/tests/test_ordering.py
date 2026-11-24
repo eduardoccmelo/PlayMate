@@ -96,3 +96,26 @@ def test_settle_is_idempotent() -> None:
 
     assert [e.id for e in once[0]] == [e.id for e in twice[0]]
     assert [e.id for e in once[1]] == [e.id for e in twice[1]]
+
+
+def test_an_overdue_confirmed_entry_moves_to_the_waiting_list_tail() -> None:
+    ann, bob, cid, dan = (ListEntry(id=uuid4()) for _ in range(4))
+    late = ListEntry(id=bob.id, overdue=True)
+    confirmed, waiting, promoted, _ = settle([ann, late, cid], [dan], max_players=3)
+    # Bob leaves the roster for the tail; Dan is promoted into the free slot.
+    assert [e.id for e in confirmed] == [ann.id, cid.id, dan.id]
+    assert [e.id for e in waiting] == [bob.id]
+    assert [e.id for e in promoted] == [dan.id]
+
+
+def test_an_overdue_waiting_entry_is_never_auto_promoted() -> None:
+    ann = ListEntry(id=uuid4())
+    late = ListEntry(id=uuid4(), overdue=True)
+    next_in_line = ListEntry(id=uuid4())
+    _, waiting, promoted, _ = settle([ann], [late, next_in_line], max_players=2)
+    assert [e.id for e in promoted] == [next_in_line.id]
+    assert [e.id for e in waiting] == [late.id]
+
+    # With nobody else waiting, the overdue entry still stays put.
+    _, waiting, promoted, _ = settle([ann], [late], max_players=2)
+    assert promoted == [] and [e.id for e in waiting] == [late.id]

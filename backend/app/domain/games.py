@@ -84,9 +84,19 @@ async def create_game(
 
 async def get_game(session: AsyncSession, game_id: UUID) -> Game:
     game = await session.get(Game, game_id)
-    if game is None:
+    if game is None or game.status is GameStatus.DELETED:
         raise NotFound("Game not found")
     return game
+
+
+async def delete_game(session: AsyncSession, *, game_id: UUID) -> None:
+    """Soft delete: participant history stays for statistics (rule 18)."""
+    game = await get_game(session, game_id)
+    game.status = GameStatus.DELETED
+    # The schema ties cancelled_at/cancel_reason to status = 'cancelled'.
+    game.cancelled_at = None
+    game.cancel_reason = None
+    await session.flush()
 
 
 def recompute_schedule(game: Game, group: Group) -> None:

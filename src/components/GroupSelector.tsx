@@ -1,4 +1,5 @@
 import { Fragment, useState, type FormEvent } from "react";
+import { runtimeConfig } from "../config/runtime";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser, GameSession, PlayerGroup } from "../types";
 import { hasGameEnded, normalizeText, weekdayName } from "../utils/game";
@@ -22,12 +23,14 @@ type GroupSelectorProps = {
   adminGroupIds: string[];
   onBack: () => void;
   onProfile: () => void;
-  onCreate: (name: string, passcode: string) => void;
+  onCreate: (name: string, passcode: string) => void | Promise<void>;
   onChoose: (group: PlayerGroup) => void;
-  onChangePasscode: (groupId: string, passcode: string) => void;
-  onRename: (groupId: string, name: string) => void;
+  onChangePasscode: (groupId: string, currentPasscode: string, passcode: string) => void | Promise<void>;
+  onRename: (groupId: string, name: string) => void | Promise<void>;
+  /** API mode: issue a fresh shareable code (the server stores only a hash). */
+  onRequestJoinCode?: (groupId: string) => Promise<string>;
   myGames: GameSession[];
-  onJoinGroup: (code: string, passcode: string) => string | null;
+  onJoinGroup: (code: string, passcode: string) => string | null | Promise<string | null>;
   onAddMyGame: (code: string) => string | null;
   onOpenMyGame: (game: GameSession) => void;
   onLeaveMyGame: (game: GameSession) => void;
@@ -160,6 +163,7 @@ export function GroupSelector({
   onChoose,
   onChangePasscode,
   onRename,
+  onRequestJoinCode,
   myGames,
   onJoinGroup,
   onAddMyGame,
@@ -184,6 +188,7 @@ export function GroupSelector({
   const [renamedGroupName, setRenamedGroupName] = useState("");
   const [editCurrentPasscode, setEditCurrentPasscode] = useState("");
   const [groupError, setGroupError] = useState("");
+  const [shareError, setShareError] = useState("");
   const [joinError, setJoinError] = useState("");
   const [gameCodeError, setGameCodeError] = useState("");
   const canChangeGroupPasscode = Boolean(
@@ -224,7 +229,7 @@ export function GroupSelector({
     )
     .slice(0, 5);
 
-  const createGroup = (event: FormEvent) => {
+  const createGroup = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !passcode.trim()) return;
     if (
@@ -233,14 +238,19 @@ export function GroupSelector({
       setGroupError("Já existe um grupo com esse nome.");
       return;
     }
-    onCreate(name.trim(), passcode);
-    setName("");
-    setPasscode("");
-    setIsCreating(false);
+    try {
+      await onCreate(name.trim(), passcode);
+      setName("");
+      setPasscode("");
+      setIsCreating(false);
+      setGroupError("");
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : "Não foi possível criar o grupo.");
+    }
   };
-  const joinGroup = (event: FormEvent) => {
+  const joinGroup = async (event: FormEvent) => {
     event.preventDefault();
-    const error = onJoinGroup(joinCode, joinPasscode);
+    const error = await onJoinGroup(joinCode, joinPasscode);
     if (error) {
       setJoinError(error);
       return;
@@ -261,8 +271,18 @@ export function GroupSelector({
     setIsAddingGame(false);
     setGameCodeError("");
   };
-  const openGroupInvite = (group: PlayerGroup, canInviteAdmins: boolean) => {
+  const openGroupInvite = async (group: PlayerGroup, canInviteAdmins: boolean) => {
     setInviteCodeCopied(null);
+    setShareError("");
+    if (group.apiManaged && !group.publicJoinCode && onRequestJoinCode) {
+      try {
+        const joinCode = await onRequestJoinCode(group.id);
+        setGroupInvite({ group: { ...group, publicJoinCode: joinCode }, canInviteAdmins });
+      } catch (error) {
+        setShareError(error instanceof Error ? error.message : "Não foi possível gerar o código.");
+      }
+      return;
+    }
     setGroupInvite({ group, canInviteAdmins });
   };
   const copyInviteCode = async (code: string, type: "players" | "admins") => {
@@ -317,6 +337,11 @@ export function GroupSelector({
             </button>
           </div>
         </div>
+        {shareError && (
+          <small className="error" role="alert">
+            {localize(shareError, language)}
+          </small>
+        )}
       </section>
 
       {isCreating && (
@@ -531,10 +556,14 @@ export function GroupSelector({
                           </>
                         )}
                       </div>
-                      <small>
-                        {localize("Código do grupo", language)}:{" "}
-                        {groupPlayerInviteCode(group)}
-                      </small>
+                      {(!group.apiManaged || group.publicJoinCode) && (
+                        <small>
+                          {localize("Código do grupo", language)}:{" "}
+                          {group.apiManaged
+                            ? group.publicJoinCode
+                            : groupPlayerInviteCode(group)}
+                        </small>
+                      )}
                     </div>
                     <div
                       className={`group-row-actions ${isAdmin ? "" : "group-member-actions"}`}
@@ -548,12 +577,14 @@ export function GroupSelector({
                           language,
                         )}
                       </button>
-                      <button
-                        className="primary group-share-button"
-                        onClick={() => openGroupInvite(group, isAdmin)}
-                      >
-                        {localize("Compartilhar", language)}
-                      </button>
+                      {(!group.apiManaged || group.publicJoinCode || isAdmin) && (
+                        <button
+                          className="primary group-share-button"
+                          onClick={() => void openGroupInvite(group, isAdmin)}
+                        >
+                          {localize("Compartilhar", language)}
+                        </button>
+                      )}
                     </div>
                   </article>
                   {index < memberGroups.length - 1 && (
@@ -569,7 +600,7 @@ export function GroupSelector({
           )}
         </section>
       </section>
-      {availableGroups.length > 0 && (
+      {availableGroups.length > 0 && !groups.some((group) => group.apiManaged) && (
         <section className="available-code-copy">
           <span className="available-code-label">
             {language === "pt"
@@ -604,14 +635,17 @@ export function GroupSelector({
                 )}
               </h1>
             </div>
-            <div className="game-directory-actions">
-              <button
-                className="secondary"
-                onClick={() => setIsAddingGame(true)}
-              >
-                {localize("Tenho um código de jogo", language)}
-              </button>
-            </div>
+            {/* Single-game guest access is not on the server yet (API mode). */}
+            {runtimeConfig.dataSource !== "api" && (
+              <div className="game-directory-actions">
+                <button
+                  className="secondary"
+                  onClick={() => setIsAddingGame(true)}
+                >
+                  {localize("Tenho um código de jogo", language)}
+                </button>
+              </div>
+            )}
           </div>
           <section className="panel group-list my-games-list">
             {myGames.length ? (
@@ -691,7 +725,7 @@ export function GroupSelector({
             role="dialog"
           >
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
                 const nextName = renamedGroupName.trim();
                 if (!nextName) return;
@@ -708,16 +742,31 @@ export function GroupSelector({
                 if (
                   canChangeGroupPasscode &&
                   newPasscode.trim() &&
+                  !groupToRename.apiManaged &&
                   editCurrentPasscode !== groupToRename.organizerPasscode
                 ) {
                   setGroupError("Senha atual incorreta.");
                   return;
                 }
                 if (nextName !== groupToRename.name) {
-                  onRename(groupToRename.id, nextName);
+                  try {
+                    await onRename(groupToRename.id, nextName);
+                  } catch (error) {
+                    setGroupError(error instanceof Error ? error.message : "Não foi possível renomear o grupo.");
+                    return;
+                  }
                 }
                 if (canChangeGroupPasscode && newPasscode.trim()) {
-                  onChangePasscode(groupToRename.id, newPasscode);
+                  try {
+                    await onChangePasscode(
+                      groupToRename.id,
+                      editCurrentPasscode,
+                      newPasscode,
+                    );
+                  } catch (error) {
+                    setGroupError(error instanceof Error ? error.message : "Não foi possível alterar a senha.");
+                    return;
+                  }
                 }
                 setNewPasscode("");
                 setEditCurrentPasscode("");
@@ -833,13 +882,15 @@ export function GroupSelector({
               <div className="group-invite-code-row">
                 <input
                   readOnly
-                  value={groupPlayerInviteCode(groupInvite.group)}
+                  value={groupInvite.group.apiManaged
+                    ? groupInvite.group.publicJoinCode ?? ""
+                    : groupPlayerInviteCode(groupInvite.group)}
                 />
                 <button
                   className="primary"
                   onClick={() =>
                     copyInviteCode(
-                      groupPlayerInviteCode(groupInvite.group),
+                      groupInvite.group.publicJoinCode ?? groupPlayerInviteCode(groupInvite.group),
                       "players",
                     )
                   }
@@ -848,7 +899,7 @@ export function GroupSelector({
                 </button>
               </div>
             </div>
-            {groupInvite.canInviteAdmins && (
+            {groupInvite.canInviteAdmins && !groupInvite.group.apiManaged && (
               <div className="group-invite-section">
                 <div className="group-invite-admin-heading">
                   <h2>{localize("CONVIDAR ADMINS", language)}</h2>

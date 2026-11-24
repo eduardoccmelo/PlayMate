@@ -25,6 +25,9 @@ class CreateGameRequest(CamelModel):
     court_cost_cents: int = Field(default=0, ge=0)
     currency: CurrencyCode = CurrencyCode.EUR
     auto_cancellation_hours: int | None = Field(default=None, gt=0)
+    payment_tracking_enabled: bool = False
+    #: Days a newly listed player has to pay; requires payment tracking.
+    payment_deadline_days: int | None = Field(default=None, ge=1, le=7)
     payment_info: str = ""
     player_notice: str = ""
 
@@ -38,6 +41,9 @@ class UpdateGameRequest(CamelModel):
     location: str | None = None
     court_number: str | None = None
     court_cost_cents: int | None = Field(default=None, ge=0)
+    payment_tracking_enabled: bool | None = None
+    #: Send null to remove the deadline.
+    payment_deadline_days: int | None = Field(default=None, ge=1, le=7)
     payment_info: str | None = None
     player_notice: str | None = None
 
@@ -45,10 +51,14 @@ class UpdateGameRequest(CamelModel):
 class ParticipantResponse(CamelModel):
     id: UUID
     player_id: UUID
+    #: The account that owns this entry; None for manual guests. Clients use
+    #: this, never the display name, to find the viewer's own entry.
+    user_id: UUID | None
     display_name: str
     status: ParticipantStatus
     list_position: int | None
     paid: bool
+    payment_due_at: datetime | None
     team: TeamSide | None
 
 
@@ -70,11 +80,14 @@ class GameResponse(CamelModel):
     min_players: int | None
     status: GameStatus
     cancel_reason: CancelReason | None
+    payment_tracking_enabled: bool
+    payment_deadline_days: int | None
     payment_info: str
     player_notice: str
     teams_drawn_at: datetime | None
     team_a_score: Decimal | None
     team_b_score: Decimal | None
+    created_by_user_id: UUID
 
 
 class ViewerAccessResponse(CamelModel):

@@ -10,7 +10,14 @@ import type { FormEvent, ReactNode, SetStateAction } from "react";
 import { useBrowserAppState } from "../hooks/useBrowserAppState";
 import { runtimeConfig } from "../config/runtime";
 import type { SavedProfile } from "../services/browserAppRepository";
-import { apiRepository, type ApiProfile, type ApiSession } from "../services/apiRepository";
+import {
+  apiJoinCodes,
+  apiRepository,
+  type ApiPlayerDraft,
+  type ApiProfile,
+  type ApiSession,
+} from "../services/apiRepository";
+import { groupFromApi, localIdForApi } from "../services/apiMappers";
 import { ApiError } from "../services/apiClient";
 import {
   generateBalancedTeams,
@@ -148,6 +155,16 @@ const createOwnedPlayer = (players: Player[], user: CurrentUser): Player => ({
   condition: "neutro",
   position: "neutro",
 });
+/**
+ * Apply a server profile without discarding roles already derived from the
+ * loaded groups (a /me response can land after the group refresh).
+ */
+const withApiProfile =
+  (profile: ApiProfile) =>
+  (user: CurrentUser | null): CurrentUser => ({
+    ...currentUserFromApi(profile),
+    adminGroupIds: user?.id === profile.id ? (user.adminGroupIds ?? []) : [],
+  });
 const currentUserFromApi = (profile: ApiProfile): CurrentUser => ({
   id: profile.id,
   displayName: profile.displayName,
@@ -157,6 +174,8 @@ const currentUserFromApi = (profile: ApiProfile): CurrentUser => ({
   devGodMode: false,
   createdAt: new Date().toISOString(),
 });
+const apiErrorText = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
 const ensureGroupPlayer = (group: PlayerGroup, user: CurrentUser) => {
   const existingPlayer =
     group.players.find((player) => player.ownerUserId === user.id) ??
@@ -248,6 +267,38 @@ export function PlayMateApp() {
       })),
     [setBrowserState],
   );
+  const refreshApiGroups = useCallback(async () => {
+    const session = apiRepository.readSession();
+    if (!session) return;
+    const memberships = await apiRepository.listGroups(session.token);
+    const loadedGroups = await Promise.all(
+      memberships.map(async (membership) => {
+        const [directory, gameRows] = await Promise.all([
+          apiRepository.listPlayers(session.token, membership.id),
+          apiRepository.listGames(session.token, membership.id),
+        ]);
+        const details = await Promise.all(
+          gameRows.map((gameRow) => apiRepository.readGame(session.token, gameRow.id)),
+        );
+        return groupFromApi({
+          membership,
+          directory,
+          details,
+          viewer: session.user,
+          joinCode: apiJoinCodes.read(membership.id),
+        });
+      }),
+    );
+    setGroups(loadedGroups);
+    setCurrentUser((user) => user
+      ? {
+          ...user,
+          adminGroupIds: loadedGroups
+            .filter((group) => group.admins?.some((admin) => admin.userId === user.id))
+            .map((group) => group.id),
+        }
+      : user);
+  }, [setCurrentUser, setGroups]);
   const language = languagePreference ?? browserLanguage();
   const [access, setAccess] = useState<
     | "home"
@@ -315,12 +366,15 @@ export function PlayMateApp() {
     const session = apiRepository.readSession();
     if (!session) {
       setCurrentUser(null);
+      setGroups([]);
       return;
     }
+    // Show the stored identity at once; /me below confirms or revokes it.
+    setCurrentUser(currentUserFromApi(session.user));
     let cancelled = false;
     void apiRepository.currentUser(session.token)
       .then((profile) => {
-        if (!cancelled) setCurrentUser(currentUserFromApi(profile));
+        if (!cancelled) setCurrentUser(withApiProfile(profile));
       })
       .catch((error: unknown) => {
         // A timeout or a temporary 5xx must not log a valid user out. Only
@@ -333,7 +387,17 @@ export function PlayMateApp() {
     return () => {
       cancelled = true;
     };
-  }, [setCurrentUser]);
+  }, [setCurrentUser, setGroups]);
+  useEffect(() => {
+    if (runtimeConfig.dataSource !== "api" || !currentUser?.id) return;
+    let cancelled = false;
+    void refreshApiGroups().catch((error: unknown) => {
+      if (!cancelled) console.error("Could not load shared groups and games", error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, refreshApiGroups]);
   useEffect(() => {
     if (
       !runtimeConfig.loadDemoSeed ||
@@ -585,6 +649,8 @@ export function PlayMateApp() {
   const [, setPick] = useState("");
   const [, setEntered] = useState(false);
   const [notice, setNotice] = useState("");
+  /** Last failed server write in API mode, shown on every page. */
+  const [syncError, setSyncError] = useState("");
   const [balanceNotice, setBalanceNotice] = useState("");
   const [cancellationNotice, setCancellationNotice] = useState("");
   const [gameToDelete, setGameToDelete] = useState<GameSession | null>(null);
@@ -688,7 +754,155 @@ export function PlayMateApp() {
       ),
     };
   }, []);
+  const usesApiGroup =
+    runtimeConfig.dataSource === "api" && Boolean(activeGroup?.apiManaged);
+  /** Persist a directory player on the server; resolves to an error message. */
+  const saveApiPlayer = async (
+    existing: Player | null,
+    draft: Pick<Player, "name" | "level" | "mobility" | "condition" | "position">,
+    joinGameId?: string,
+  ): Promise<string | null> => {
+    const session = apiRepository.readSession();
+    if (!session || !activeGroup) return "Entre na sua conta para salvar o jogador.";
+    const isAdmin = adminGroupIds.includes(activeGroup.id);
+    const full: ApiPlayerDraft = {
+      displayName: draft.name,
+      level: draft.level,
+      mobility: draft.mobility,
+      condition: draft.condition,
+      position: draft.position,
+    };
+    try {
+      if (existing) {
+        if (!existing.apiId) return "Este jogador não está vinculado ao servidor.";
+        // Ratings are never authored by the player themself, and non-admins
+        // may only change their own position and condition.
+        const ownProfile = isCurrentUserPlayer(existing, currentUser);
+        await apiRepository.updatePlayer(
+          session.token,
+          activeGroup.id,
+          existing.apiId,
+          isAdmin && !ownProfile
+            ? full
+            : { condition: draft.condition, position: draft.position },
+        );
+      } else {
+        const created = await apiRepository.createPlayer(session.token, activeGroup.id, full);
+        if (joinGameId) await apiRepository.joinGame(session.token, joinGameId, created.id);
+      }
+      await refreshApiGroups();
+      return null;
+    } catch (error) {
+      return apiErrorText(error, "Não foi possível salvar o jogador.");
+    }
+  };
+  const syncApiGame = async (
+    previousGame: GameSession,
+    nextGame: GameSession,
+    playerRecords: Player[],
+  ) => {
+    const session = apiRepository.readSession();
+    if (!session || !nextGame.apiId) return;
+    const gameId = nextGame.apiId;
+    let requested = false;
+    const scheduleOrDetailsChanged =
+      previousGame.date !== nextGame.date ||
+      previousGame.time !== nextGame.time ||
+      previousGame.duration !== nextGame.duration ||
+      previousGame.location !== nextGame.location ||
+      previousGame.courtNumber !== nextGame.courtNumber ||
+      previousGame.courtCost !== nextGame.courtCost ||
+      previousGame.maxPlayers !== nextGame.maxPlayers ||
+      previousGame.minPlayers !== nextGame.minPlayers ||
+      previousGame.paymentInfo !== nextGame.paymentInfo ||
+      hasPaymentTracking(previousGame) !== hasPaymentTracking(nextGame) ||
+      (previousGame.paymentDeadlineDays ?? null) !==
+        (nextGame.paymentDeadlineDays ?? null) ||
+      previousGame.disclaimer !== nextGame.disclaimer;
+    if (!previousGame.cancelled && nextGame.cancelled) {
+      await apiRepository.cancelGame(session.token, gameId, "manual");
+      requested = true;
+    } else if (scheduleOrDetailsChanged) {
+      await apiRepository.updateGame(session.token, gameId, {
+        gameDate: nextGame.date,
+        startTime: nextGame.time,
+        durationMinutes: nextGame.duration,
+        maxPlayers: nextGame.maxPlayers,
+        minPlayers: nextGame.minPlayers,
+        location: nextGame.location,
+        courtNumber: nextGame.courtNumber,
+        courtCostCents: Math.round(nextGame.courtCost * 100),
+        paymentTrackingEnabled: hasPaymentTracking(nextGame),
+        paymentDeadlineDays: hasPaymentTracking(nextGame)
+          ? (nextGame.paymentDeadlineDays ?? null)
+          : null,
+        paymentInfo: hasPaymentTracking(nextGame) ? nextGame.paymentInfo : "",
+        playerNotice: nextGame.disclaimer,
+      });
+      requested = true;
+    }
+
+    const previousIds = [...previousGame.playerIds, ...previousGame.waitlistIds];
+    const nextIds = [...nextGame.playerIds, ...nextGame.waitlistIds];
+    const capacityChanged = previousGame.maxPlayers !== nextGame.maxPlayers;
+    if (!capacityChanged) {
+      for (const playerId of nextIds.filter((id) => !previousIds.includes(id))) {
+        const player = playerRecords.find((candidate) => candidate.id === playerId);
+        const isCurrentUser = player?.ownerUserId === currentUser?.id;
+        if (!player?.apiId && !isCurrentUser) {
+          throw new Error("Este jogador ainda não possui um perfil compartilhado no servidor.");
+        }
+        await apiRepository.joinGame(session.token, gameId, player?.apiId);
+        requested = true;
+      }
+      for (const playerId of previousIds.filter((id) => !nextIds.includes(id))) {
+        const participantId = previousGame.apiParticipantIdsByPlayerId?.[playerId];
+        if (participantId) {
+          await apiRepository.leaveGame(session.token, gameId, participantId);
+          requested = true;
+        }
+      }
+      for (const playerId of nextGame.playerIds) {
+        const wasPaid = previousGame.paidPlayerIds.includes(playerId);
+        const isPaid = nextGame.paidPlayerIds.includes(playerId);
+        const participantId = previousGame.apiParticipantIdsByPlayerId?.[playerId];
+        if (wasPaid !== isPaid && participantId) {
+          await apiRepository.updatePayment(
+            session.token,
+            gameId,
+            participantId,
+            isPaid,
+          );
+          requested = true;
+        }
+      }
+      const membershipUnchanged = previousIds.length === nextIds.length &&
+        previousIds.every((id) => nextIds.includes(id));
+      if (membershipUnchanged) {
+        for (const [status, before, after] of [
+          ["confirmed", previousGame.playerIds, nextGame.playerIds],
+          ["waiting_list", previousGame.waitlistIds, nextGame.waitlistIds],
+        ] as const) {
+          if (before.some((id, index) => after[index] !== id)) {
+            const orderedIds = after
+              .map((id) => previousGame.apiParticipantIdsByPlayerId?.[id])
+              .filter((id): id is string => Boolean(id));
+            await apiRepository.reorderParticipants(
+              session.token,
+              gameId,
+              status,
+              orderedIds,
+            );
+            requested = true;
+          }
+        }
+      }
+    }
+    if (requested) await refreshApiGroups();
+  };
   useEffect(() => {
+    // The server promotes from the waiting list inside each roster change.
+    if (runtimeConfig.dataSource === "api") return;
     const hasOpenSpotWithWaitingPlayer = games.some(
       (gameSession) =>
         gameSession.playerIds.length < gameSession.maxPlayers &&
@@ -710,6 +924,17 @@ export function PlayMateApp() {
     );
   }, [fillOpenSpots, games, players, refreshTeams, setGames]);
   useEffect(() => {
+    if (runtimeConfig.dataSource === "api") {
+      // The server moves overdue players when a game is read; fetch it again
+      // once a confirmed player's deadline has passed on this clock.
+      const anyOverdue = games.some((gameSession) =>
+        gameSession.playerIds.some((playerId) =>
+          isPaymentOverdue(gameSession, playerId, clock),
+        ),
+      );
+      if (anyOverdue) void refreshApiGroups().catch(() => undefined);
+      return;
+    }
     const nextGames = games.map((gameSession) => {
       if (!hasPaymentTracking(gameSession) || !gameSession.paymentDeadlineDays)
         return gameSession;
@@ -734,8 +959,12 @@ export function PlayMateApp() {
     });
     if (nextGames.some((entry, index) => entry !== games[index]))
       setGames(nextGames);
-  }, [clock, fillOpenSpots, games, refreshTeams, setGames]);
-  const updateGame = (gameSession: GameSession, shouldRefreshTeams = true) => {
+  }, [clock, fillOpenSpots, games, refreshApiGroups, refreshTeams, setGames]);
+  const updateGame = (
+    gameSession: GameSession,
+    shouldRefreshTeams = true,
+    playerRecords = players,
+  ) => {
     const previousGame = games.find(
       (storedGame) => storedGame.id === gameSession.id,
     );
@@ -768,6 +997,17 @@ export function PlayMateApp() {
         storedGame.id === refreshedGame.id ? refreshedGame : storedGame,
       ),
     );
+    if (
+      runtimeConfig.dataSource === "api" &&
+      previousGame?.apiId &&
+      refreshedGame.apiId
+    ) {
+      void syncApiGame(previousGame, refreshedGame, playerRecords).catch((error: unknown) => {
+        setSyncError(apiErrorText(error, "Não foi possível salvar as alterações no servidor."));
+        // Drop the optimistic local change so the UI matches the server again.
+        void refreshApiGroups().catch(() => undefined);
+      });
+    }
   };
   const updateCancellationSettings = (
     gameSession: GameSession,
@@ -782,7 +1022,7 @@ export function PlayMateApp() {
     if (
       nextGame.minPlayers !== null &&
       cancellationTime !== null &&
-      cancellationTime < Date.now()
+      cancellationTime < clock
     ) {
       setCancellationNotice(
         "O horário de cancelamento é anterior ao horário de criação do evento.",
@@ -793,7 +1033,7 @@ export function PlayMateApp() {
     setCancellationNotice("");
     updateGame(nextGame, false);
   };
-  const createOrEdit = (e: FormEvent) => {
+  const createOrEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (
       !gameForm.date ||
@@ -812,7 +1052,7 @@ export function PlayMateApp() {
     const endTime = endTimeFromDuration(gameForm.time, gameForm.duration);
     if (
       !editGame &&
-      new Date(`${gameForm.date}T${gameForm.time}:00`).getTime() <= Date.now()
+      new Date(`${gameForm.date}T${gameForm.time}:00`).getTime() <= clock
     ) {
       setGameFormError("Não é possível criar um jogo em um horário passado.");
       return;
@@ -830,6 +1070,63 @@ export function PlayMateApp() {
       )
     ) {
       setGameFormError("Já existe um jogo com esses mesmos dados.");
+      return;
+    }
+    if (runtimeConfig.dataSource === "api") {
+      const session = apiRepository.readSession();
+      if (!session || !activeGroupId) {
+        setGameFormError("Entre na sua conta para salvar o jogo.");
+        return;
+      }
+      const apiDraft = {
+        gameDate: gameForm.date,
+        startTime: gameForm.time,
+        durationMinutes: Number(gameForm.duration),
+        maxPlayers: Number(gameForm.maxPlayers),
+        minPlayers: null,
+        location: gameForm.location,
+        courtNumber: gameForm.courtNumber,
+        courtCostCents: Math.round(Number(gameForm.courtCost) * 100),
+        currency: gameForm.currency,
+        autoCancellationHours: 2,
+        paymentTrackingEnabled: gameForm.paymentTrackingEnabled,
+        paymentDeadlineDays: gameForm.paymentTrackingEnabled
+          ? gameForm.paymentDeadlineDays
+          : null,
+        paymentInfo: gameForm.paymentTrackingEnabled ? gameForm.paymentInfo : "",
+        playerNotice: gameForm.disclaimer,
+      } as const;
+      try {
+        let serverGameId: string;
+        if (editGame) {
+          const old = games.find((candidate) => candidate.id === editGame);
+          if (!old?.apiId) {
+            setGameFormError("Este jogo não está vinculado ao servidor.");
+            return;
+          }
+          const updated = await apiRepository.updateGame(
+            session.token,
+            old.apiId,
+            apiDraft,
+          );
+          serverGameId = updated.id;
+        } else {
+          const created = await apiRepository.createGame(
+            session.token,
+            activeGroupId,
+            apiDraft,
+          );
+          serverGameId = created.game.id;
+        }
+        await refreshApiGroups();
+        setGameId(localIdForApi(serverGameId));
+        setEditGame(null);
+        setIsGameCreationOpen(false);
+        setGameForm(emptyGame);
+        setGameFormError("");
+      } catch (error) {
+        setGameFormError(error instanceof Error ? error.message : "Não foi possível salvar o jogo.");
+      }
       return;
     }
     if (editGame) {
@@ -950,6 +1247,27 @@ export function PlayMateApp() {
       setPlayerFormError("Esse nome já está na lista.");
       return;
     }
+    if (usesApiGroup) {
+      const existing =
+        editPlayer === null
+          ? null
+          : players.find((player) => player.id === editPlayer) ?? null;
+      void saveApiPlayer(
+        existing,
+        { ...playerForm, name },
+        existing ? undefined : game?.apiId,
+      ).then((error) => {
+        if (error) {
+          setPlayerFormError(error);
+          return;
+        }
+        setPlayerForm(emptyPlayer);
+        setEditPlayer(null);
+        setPlayerFormError("");
+        setIsPlayerFormOpen(false);
+      });
+      return;
+    }
     const isNewPlayer = editPlayer === null;
     const newPlayerId = nextIdentifier(players);
     const next = editPlayer
@@ -1060,7 +1378,20 @@ export function PlayMateApp() {
     setEntered(false);
     setPick("");
   };
-  const deletePlayerFromDirectory = (pid: number) => {
+  const deletePlayerFromDirectory = async (pid: number): Promise<string | void> => {
+    if (usesApiGroup) {
+      const session = apiRepository.readSession();
+      const player = players.find((candidate) => candidate.id === pid);
+      if (!session || !activeGroup || !player?.apiId)
+        return "Este jogador não está vinculado ao servidor.";
+      try {
+        await apiRepository.archivePlayer(session.token, activeGroup.id, player.apiId);
+        await refreshApiGroups();
+        return;
+      } catch (error) {
+        return apiErrorText(error, "Não foi possível remover o jogador.");
+      }
+    }
     const next = players.filter((p) => p.id !== pid);
     setPlayers(next);
     saveGames(
@@ -1104,6 +1435,10 @@ export function PlayMateApp() {
             : { ...game, waitlistIds: [...game.waitlistIds, pid] },
           pid,
         ),
+        true,
+        players.some((candidate) => candidate.id === pid)
+          ? players
+          : [...players, player],
       );
     }
     setEntered(true);
@@ -1146,6 +1481,27 @@ export function PlayMateApp() {
       group.games.some((gameSession) => gameSession === selectedGame),
     );
     if (!selectedGroup) return;
+    const player = selectedGroup.players.find((item) =>
+      isCurrentUserPlayer(item, currentUser),
+    );
+    const participantId = player
+      ? selectedGame.apiParticipantIdsByPlayerId?.[player.id]
+      : undefined;
+    if (
+      runtimeConfig.dataSource === "api" &&
+      selectedGame.apiId &&
+      participantId
+    ) {
+      const session = apiRepository.readSession();
+      if (session) {
+        void apiRepository.leaveGame(session.token, selectedGame.apiId, participantId)
+          .then(refreshApiGroups)
+          .catch((error: unknown) => {
+            setSyncError(apiErrorText(error, "Não foi possível sair do jogo."));
+            void refreshApiGroups().catch(() => undefined);
+          });
+      }
+    }
     setGroups((currentGroups) =>
       currentGroups.map((group) => {
         if (group.id !== selectedGroup.id) return group;
@@ -1218,6 +1574,16 @@ export function PlayMateApp() {
   };
   const leaveGroup = (groupToLeave: PlayerGroup) => {
     if (!currentUser) return false;
+    if (runtimeConfig.dataSource === "api" && groupToLeave.apiManaged) {
+      const session = apiRepository.readSession();
+      if (!session) return false;
+      void apiRepository.leaveGroup(session.token, groupToLeave.id)
+        .then(refreshApiGroups)
+        .catch((error: unknown) =>
+          setSyncError(apiErrorText(error, "Não foi possível sair do grupo.")),
+        );
+      return true;
+    }
     const currentMembership = (groupToLeave.admins ?? []).find(
       (admin) => admin.userId === currentUser.id,
     );
@@ -1379,6 +1745,7 @@ export function PlayMateApp() {
     if (runtimeConfig.dataSource === "api") {
       const session = apiRepository.readSession();
       apiRepository.clearSession();
+      apiJoinCodes.clear();
       if (session) void apiRepository.signOut(session.token).catch(() => undefined);
     }
     if (currentUser) {
@@ -1396,6 +1763,18 @@ export function PlayMateApp() {
   };
   const withProfile = (page: ReactNode) => (
     <>
+      {syncError && (
+        <div className="sync-error" role="alert">
+          <span>{localize(syncError, language)}</span>
+          <button
+            aria-label={localize("Fechar", language)}
+            onClick={() => setSyncError("")}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {page}
       <LandingPage
         key={`${currentUser?.id ?? "anonymous"}:${currentUser?.email ?? ""}`}
@@ -1409,7 +1788,7 @@ export function PlayMateApp() {
           setCurrentUser(currentUserFromApi(session.user));
           setGroups([]);
         }}
-        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
+        onApiProfile={(profile) => setCurrentUser(withApiProfile(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => undefined}
@@ -1431,7 +1810,19 @@ export function PlayMateApp() {
         onProfile={() => {
           setProfileRequested(true);
         }}
-        onCreate={(name, organizerPasscode) => {
+        onCreate={async (name, organizerPasscode) => {
+          if (runtimeConfig.dataSource === "api") {
+            const session = apiRepository.readSession();
+            if (!session) throw new Error("Entre na sua conta para criar um grupo.");
+            const created = await apiRepository.createGroup(
+              session.token,
+              name,
+              organizerPasscode,
+            );
+            apiJoinCodes.save(created.group.id, created.joinCode);
+            await refreshApiGroups();
+            return;
+          }
           const ownerPlayer = currentUser
             ? createOwnedPlayer([], currentUser)
             : null;
@@ -1469,20 +1860,39 @@ export function PlayMateApp() {
           setPick("");
           setAccess(adminGroupIds.includes(group.id) ? "admin" : "player");
         }}
-        onChangePasscode={(groupId, organizerPasscode) =>
-          setGroups((currentGroups) =>
-            currentGroups.map((group) => {
-              if (group.id !== groupId) return group;
-              const membership = (group.admins ?? []).find(
-                (admin) => admin.userId === currentUser?.id,
-              );
-              return membership?.role === "owner"
-                ? { ...group, organizerPasscode }
-                : group;
-            }),
-          )
-        }
-        onRename={(groupId, name) =>
+        onChangePasscode={async (groupId, currentPasscode, organizerPasscode) => {
+          const group = groups.find((candidate) => candidate.id === groupId);
+          if (runtimeConfig.dataSource === "api" && group?.apiManaged) {
+            const session = apiRepository.readSession();
+            if (!session) throw new Error("Entre na sua conta para alterar a senha.");
+            await apiRepository.changeGroupPasscode(
+              session.token,
+              groupId,
+              currentPasscode,
+              organizerPasscode,
+            );
+            await refreshApiGroups();
+            return;
+          }
+          setGroups((currentGroups) => currentGroups.map((candidate) => {
+            if (candidate.id !== groupId) return candidate;
+            const membership = (candidate.admins ?? []).find(
+              (admin) => admin.userId === currentUser?.id,
+            );
+            return membership?.role === "owner"
+              ? { ...candidate, organizerPasscode }
+              : candidate;
+          }));
+        }}
+        onRename={async (groupId, name) => {
+          const target = groups.find((candidate) => candidate.id === groupId);
+          if (runtimeConfig.dataSource === "api" && target?.apiManaged) {
+            const session = apiRepository.readSession();
+            if (!session) throw new Error("Entre na sua conta para renomear o grupo.");
+            await apiRepository.renameGroup(session.token, groupId, name);
+            await refreshApiGroups();
+            return;
+          }
           setGroups((currentGroups) =>
             currentGroups.map((group) => {
               if (group.id !== groupId) return group;
@@ -1491,9 +1901,35 @@ export function PlayMateApp() {
               );
               return membership ? { ...group, name } : group;
             }),
-          )
-        }
-        onJoinGroup={(code, passcode) => {
+          );
+        }}
+        onRequestJoinCode={async (groupId) => {
+          const session = apiRepository.readSession();
+          if (!session) throw new Error("Entre na sua conta para compartilhar o grupo.");
+          const { joinCode } = await apiRepository.rotateJoinCode(session.token, groupId);
+          apiJoinCodes.save(groupId, joinCode);
+          setGroups((currentGroups) => currentGroups.map((group) =>
+            group.id === groupId ? { ...group, publicJoinCode: joinCode } : group,
+          ));
+          return joinCode;
+        }}
+        onJoinGroup={async (code, passcode) => {
+          if (runtimeConfig.dataSource === "api") {
+            const session = apiRepository.readSession();
+            if (!session || !currentUser) return "Entre na sua conta para participar de um grupo.";
+            try {
+              await apiRepository.joinGroup(
+                session.token,
+                code.trim().toUpperCase(),
+                currentUser.displayName,
+                passcode || undefined,
+              );
+              await refreshApiGroups();
+              return null;
+            } catch (error) {
+              return error instanceof Error ? error.message : "Não foi possível entrar no grupo.";
+            }
+          }
           const participantGroup = groups.find((candidate) =>
             sameInviteCode(code, groupPlayerInviteCode(candidate)),
           );
@@ -1681,7 +2117,7 @@ export function PlayMateApp() {
           setCurrentUser(currentUserFromApi(session.user));
           setGroups([]);
         }}
-        onApiProfile={(profile) => setCurrentUser(currentUserFromApi(profile))}
+        onApiProfile={(profile) => setCurrentUser(withApiProfile(profile))}
         onLogout={logout}
         onLanguageChange={setLanguage}
         onEnter={() => {
@@ -1755,6 +2191,7 @@ export function PlayMateApp() {
         }}
         canCreateGame={Boolean(
           activeGroup &&
+            runtimeConfig.dataSource !== "api" &&
             !adminGroupIds.includes(activeGroup.id) &&
             players.some(
               (player) =>
@@ -1959,6 +2396,23 @@ export function PlayMateApp() {
     );
 
   const deleteGame = (gameSession: GameSession) => {
+    if (usesApiGroup && gameSession.apiId) {
+      const session = apiRepository.readSession();
+      if (!session) return;
+      void apiRepository
+        .deleteGame(session.token, gameSession.apiId)
+        .then(refreshApiGroups)
+        .then(() => {
+          if (gameId === gameSession.id) {
+            setGameId(null);
+            setEditGame(null);
+          }
+        })
+        .catch((error: unknown) =>
+          setSyncError(apiErrorText(error, "Não foi possível excluir o jogo.")),
+        );
+      return;
+    }
     saveGames(games.filter((storedGame) => storedGame.id !== gameSession.id));
     if (gameId === gameSession.id) {
       setGameId(null);
@@ -2321,6 +2775,8 @@ export function PlayMateApp() {
             ) {
               return false;
             }
+            if (usesApiGroup)
+              return saveApiPlayer(null, player).then((error) => error ?? true);
             const playerId = nextIdentifier(players);
             const createdPlayer = {
               id: playerId,
@@ -2379,6 +2835,11 @@ export function PlayMateApp() {
               )
             ) {
               return false;
+            }
+            if (usesApiGroup) {
+              const existing =
+                players.find((player) => player.id === updatedPlayer.id) ?? null;
+              return saveApiPlayer(existing, updatedPlayer).then((error) => error ?? true);
             }
             const nextPlayers = players.map((player) =>
               player.id === updatedPlayer.id
@@ -2753,6 +3214,17 @@ export function PlayMateApp() {
             </section>
             <aside className="side-column">
               <section className="teams-section team-balance-panel">
+                {runtimeConfig.dataSource === "api" ? (
+                  // Draws and their 3+1 quota are not stored on the server yet, so a
+                  // local draw would vanish on reload and could reset the quota.
+                  <p className="balance-info-box balance-unavailable">
+                    {localize(
+                      "O balanceamento de times ainda não está disponível nesta versão. Ele voltará quando os times forem salvos no servidor.",
+                      language,
+                    )}
+                  </p>
+                ) : (
+                  <>
                 <p className="balance-info-box">
                   {localize(
                     "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.",
@@ -2879,6 +3351,8 @@ export function PlayMateApp() {
                     language={language}
                     showPositions={!isParticipantGameManager}
                   />
+                )}
+                  </>
                 )}
               </section>
             </aside>

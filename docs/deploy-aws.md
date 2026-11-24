@@ -45,8 +45,10 @@ database connection is not.
 The frontend is built by Vite, so its `VITE_*` variables are build-time
 inputs. GitHub repository variables `VITE_DATA_SOURCE` and `VITE_DEMO_SEED`
 are written into the deployment `.env` and forwarded as Docker build args.
-Keep them as `browser` and `false` respectively until SMTP and the matching
-groups/games API slices are production-ready.
+When `VITE_DATA_SOURCE` is unset the workflow still builds `browser` (the
+localStorage prototype). Set it to `api` to serve groups and games from
+PostgreSQL; the workflow then refuses to deploy unless every `SMTP_*` secret
+is present, because production sign-in depends on emailed access codes.
 
 ## 2.1 SMTP for production sign-in
 
@@ -101,10 +103,10 @@ Put the backup command in cron and copy the dump off the instance (S3 via
 - **No rate limiting** on `/v1/auth/*` or `/v1/groups/join` yet
   (`docs/backend-plan-python.md` §9). Add it in nginx (`limit_req`) or the
   app before the instance is public.
-- **The frontend does not call the API yet.** `src/services/apiClient.ts`
-  exists but nothing imports it; the UI still runs on `localStorage`. The
-  deployed site is therefore the browser-only prototype plus a working API
-  at `/api/v1/*` for the cut-over.
+- **The frontend uses the API only in `api` mode.** With the default
+  `browser` build the deployed site is the localStorage prototype plus a
+  working API at `/api/v1/*`. In `api` mode, team balancing, skill voting
+  and single-game codes are disabled until they are stored on the server.
 - **Single instance only.** Migrations run inside the backend container's
   start command; with more than one backend replica, run them once
   separately and drop them from the `CMD`.

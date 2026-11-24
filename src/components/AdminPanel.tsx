@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { runtimeConfig } from "../config/runtime";
 import type { CurrentUser, PlayerGroup } from "../types";
 import { localize, type Language } from "../i18n";
 import { Header } from "./Header";
@@ -137,13 +138,24 @@ export function AdminPanel({
 
       <section className="panel admin-panel-section skill-voting-section">
         <h2>{localize("Votação de atributos", language)}</h2>
-        <p className="admin-panel-help">
-          {localize(
-            "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.",
-            language,
-          )}
-        </p>
-        {eligiblePlayers.map((player) => {
+        {runtimeConfig.dataSource !== "api" && (
+          <p className="admin-panel-help">
+            {localize(
+              "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.",
+              language,
+            )}
+          </p>
+        )}
+        {runtimeConfig.dataSource === "api" ? (
+          // Ballots are not stored on the server yet; a local vote would be
+          // lost on reload and never reach other admins.
+          <p className="admin-panel-help vote-unavailable">
+            {localize(
+              "A votação de atributos ainda não está disponível nesta versão. Ela voltará quando os votos forem salvos no servidor.",
+              language,
+            )}
+          </p>
+        ) : eligiblePlayers.map((player) => {
           const isSelf = isOwnPlayer(player);
           const votes = skillVotesFor(group, player.id);
           const levelVotes = votes.filter((vote) => vote.level !== undefined);

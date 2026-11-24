@@ -43,7 +43,7 @@ services:
     build:
       context: .
       args:
-        VITE_DATA_SOURCE: ${VITE_DATA_SOURCE:-browser}
+        VITE_DATA_SOURCE: ${VITE_DATA_SOURCE:-api}
         VITE_DEMO_SEED: ${VITE_DEMO_SEED:-false}
     depends_on:
       backend:
