@@ -81,6 +81,10 @@ def is_overdue(row: GameParticipant, now: datetime) -> bool:
     )
 
 
+#: Public name for other domain modules.
+active_lists = _active_lists
+
+
 def _entries(rows: list[GameParticipant], now: datetime) -> list[ListEntry]:
     return [
         ListEntry(
@@ -121,8 +125,12 @@ async def _settle_lists(
         row = by_id[entry.id]
         row.status = ParticipantStatus.WAITING_LIST
         row.list_position = entry.position
+        row.team = None  # Only confirmed players can hold a team place.
 
     await session.flush()
+    from app.domain import balancing  # Local: balancing imports this module.
+
+    await balancing.reconcile(session, game, [by_id[entry.id] for entry in new_confirmed])
     return (
         [by_id[entry.id] for entry in promoted],
         [by_id[entry.id] for entry in overflowed],

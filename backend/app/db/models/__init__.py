@@ -6,6 +6,11 @@ from app.db.models.access import (
     Notification,
     NotificationRecipient,
 )
+from app.db.models.balances import (
+    GameScheduleChange,
+    GameTeamBalance,
+    GameTeamBalanceMember,
+)
 from app.db.models.games import Game, GameParticipant
 from app.db.models.groups import Group, GroupMembership, PlayerProfile, PlayerSkillVote
 from app.db.models.users import User, UserSession
@@ -14,6 +19,9 @@ __all__ = [
     "Game",
     "GameAccessRequest",
     "GameParticipant",
+    "GameScheduleChange",
+    "GameTeamBalance",
+    "GameTeamBalanceMember",
     "Group",
     "GroupMembership",
     "Invite",

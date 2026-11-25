@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.api.deps import (
+    GameContext,
     GameManagerDep,
     GameViewerDep,
     GroupAdminDep,
@@ -11,12 +12,15 @@ from app.api.deps import (
     SessionDep,
     ViewerDep,
 )
-from app.db.models import Game, GameParticipant, PlayerProfile
+from app.db.models import Game, GameParticipant, GameScheduleChange, PlayerProfile, User
+from app.domain import balancing as balancing_domain
 from app.domain import games as games_domain
 from app.domain import participants as participants_domain
 from app.domain.enums import GameStatus, ParticipantStatus
 from app.domain.errors import NotFound, PermissionDenied
 from app.schemas.games import (
+    BalanceEntryResponse,
+    BalanceSummaryResponse,
     CancelGameRequest,
     CreateGameRequest,
     CreateGameResponse,
@@ -26,6 +30,7 @@ from app.schemas.games import (
     ParticipantResponse,
     PaymentRequest,
     ReorderRequest,
+    ScheduleChangeResponse,
     UpdateGameRequest,
     ViewerAccessResponse,
 )
@@ -84,6 +89,67 @@ async def _lists(
     return confirmed, waiting
 
 
+async def _user_name(session: SessionDep, user_id: UUID | None) -> str | None:
+    if user_id is None:
+        return None
+    user = await session.get(User, user_id)
+    return user.display_name if user else None
+
+
+async def _detail(session: SessionDep, context: GameContext) -> GameDetailResponse:
+    """The full game view: lists, the viewer's capabilities and the team
+    balance state. Every endpoint returning a detail goes through here."""
+    game = context.game
+    await session.refresh(game)
+    confirmed, waiting = await _lists(session, game.id)
+    state = await balancing_domain.summary(session, game.id)
+    change = await balancing_domain.latest_schedule_change(session, game.id)
+    latest = None
+    if state.latest is not None:
+        opened_by = None
+        if state.latest.window_opened_by_schedule_change_id is not None:
+            source = await session.get(
+                GameScheduleChange, state.latest.window_opened_by_schedule_change_id
+            )
+            opened_by = await _user_name(session, source.changed_by_user_id if source else None)
+        latest = BalanceEntryResponse(
+            trigger_type=state.latest.trigger_type,
+            standard_balance_number=state.latest.standard_balance_number,
+            generated_at=state.latest.generated_at,
+            triggered_by_name=(
+                await _user_name(session, state.latest.triggered_by_user_id)
+                if context.access.can_manage_game
+                else None
+            ),
+            rescheduled_by_name=opened_by,
+        )
+    return GameDetailResponse(
+        game=GameResponse.model_validate(game),
+        viewer_access=ViewerAccessResponse.model_validate(context.access),
+        confirmed=[_participant_response(row) for row in confirmed],
+        waiting_list=[_participant_response(row) for row in waiting],
+        balance=BalanceSummaryResponse(
+            standard_count=state.standard_count,
+            standard_limit=balancing_domain.STANDARD_BALANCE_LIMIT,
+            late_rebalance_used=state.late_rebalance_used,
+            window_starts_at=game.balance_window_starts_at,
+            window_ends_at=game.balance_window_ends_at,
+            latest=latest,
+        ),
+        last_schedule_change=(
+            ScheduleChangeResponse(
+                previous_starts_at=change.previous_starts_at,
+                current_starts_at=change.current_starts_at,
+                changed_at=change.changed_at,
+                changed_by_name=await _user_name(session, change.changed_by_user_id) or "",
+                was_brought_forward=change.current_starts_at < change.previous_starts_at,
+            )
+            if change is not None
+            else None
+        ),
+    )
+
+
 @router.get("/groups/{group_id}/games", response_model=list[GameResponse])
 async def list_games(context: GroupMemberDep, session: SessionDep) -> list[GameResponse]:
     rows = (
@@ -132,13 +198,7 @@ async def create_game(
 @router.get("/games/{game_id}", response_model=GameDetailResponse)
 async def read_game(context: GameViewerDep, session: SessionDep) -> GameDetailResponse:
     await participants_domain.sweep_payment_deadlines(session, game_id=context.game.id)
-    confirmed, waiting = await _lists(session, context.game.id)
-    return GameDetailResponse(
-        game=GameResponse.model_validate(context.game),
-        viewer_access=ViewerAccessResponse.model_validate(context.access),
-        confirmed=[_participant_response(row) for row in confirmed],
-        waiting_list=[_participant_response(row) for row in waiting],
-    )
+    return await _detail(session, context)
 
 
 @router.patch("/games/{game_id}", response_model=GameResponse)
@@ -156,12 +216,23 @@ async def update_game(
     _normalize_payment_fields(game)
 
     if any(field in changes for field in SCHEDULE_FIELDS):
+        previous_start = game.starts_at
         for field in SCHEDULE_FIELDS:
             if field in changes:
                 setattr(game, field, changes[field])
         from app.domain.groups import get_group
 
         games_domain.recompute_schedule(game, await get_group(session, game.group_id))
+        if game.starts_at != previous_start and context.viewer is not None:
+            # Moves the final-rebalance window; never resets the quota.
+            session.add(
+                GameScheduleChange(
+                    game_id=game.id,
+                    previous_starts_at=previous_start,
+                    current_starts_at=game.starts_at,
+                    changed_by_user_id=context.viewer.user.id,
+                )
+            )
 
     if "max_players" in changes:
         game.max_players = changes["max_players"]
@@ -185,6 +256,17 @@ async def cancel_game(
         session, game_id=context.game.id, reason=body.reason
     )
     return GameResponse.model_validate(game)
+
+
+@router.post("/games/{game_id}/team-balance", response_model=GameDetailResponse)
+async def draw_teams(context: GameManagerDep, session: SessionDep) -> GameDetailResponse:
+    """One manual draw: three regular ones per game, then a single final
+    rebalance inside the window that opens 15 minutes before kickoff."""
+    assert context.viewer is not None
+    await balancing_domain.draw(
+        session, game_id=context.game.id, actor_user_id=context.viewer.user.id
+    )
+    return await _detail(session, context)
 
 
 @router.delete("/games/{game_id}", status_code=204)
@@ -238,13 +320,7 @@ async def join_game(
         user_id=profile.owner_user_id,
         display_name=body.display_name or profile.display_name,
     )
-    confirmed, waiting = await _lists(session, context.game.id)
-    return GameDetailResponse(
-        game=GameResponse.model_validate(context.game),
-        viewer_access=ViewerAccessResponse.model_validate(context.access),
-        confirmed=[_participant_response(row) for row in confirmed],
-        waiting_list=[_participant_response(row) for row in waiting],
-    )
+    return await _detail(session, context)
 
 
 async def _owned_participant(

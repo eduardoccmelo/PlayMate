@@ -49,6 +49,34 @@ export type ApiGame = {
   paymentInfo: string;
   playerNotice: string;
   createdByUserId: string;
+  /** Set while a team split is active. Scores arrive as decimal strings. */
+  teamsDrawnAt: string | null;
+  teamAScore: string | number | null;
+  teamBScore: string | number | null;
+};
+
+export type ApiBalanceSummary = {
+  standardCount: number;
+  standardLimit: number;
+  lateRebalanceUsed: boolean;
+  windowStartsAt: string;
+  windowEndsAt: string;
+  latest: {
+    triggerType: "organizer" | "late_rebalance";
+    standardBalanceNumber: number | null;
+    generatedAt: string;
+    /** Only sent to viewers who manage the game. */
+    triggeredByName: string | null;
+    rescheduledByName: string | null;
+  } | null;
+};
+
+export type ApiScheduleChange = {
+  previousStartsAt: string;
+  currentStartsAt: string;
+  changedAt: string;
+  changedByName: string;
+  wasBroughtForward: boolean;
 };
 
 export type ApiParticipant = {
@@ -80,6 +108,8 @@ export type ApiGameDetail = {
   };
   confirmed: ApiParticipant[];
   waitingList: ApiParticipant[];
+  balance: ApiBalanceSummary;
+  lastScheduleChange: ApiScheduleChange | null;
 };
 
 export type ApiGameDraft = {
@@ -294,6 +324,12 @@ export const apiRepository = {
       method: "PATCH",
       headers: withToken(token),
       body: JSON.stringify(changes),
+    }),
+  /** One manual draw; the server enforces eligibility and the 3 + 1 quota. */
+  drawTeams: (token: string, gameId: string) =>
+    apiFetch<ApiGameDetail>(`/v1/games/${gameId}/team-balance`, {
+      method: "POST",
+      headers: withToken(token),
     }),
   deleteGame: (token: string, gameId: string) =>
     apiFetch<void>(`/v1/games/${gameId}`, {

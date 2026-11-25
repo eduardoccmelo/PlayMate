@@ -52,6 +52,9 @@ async def recompute(session: AsyncSession, player: PlayerProfile) -> None:
     """Apply the current ballots to the profile. Without any ballot for an
     attribute the profile keeps its existing value."""
     assert player.group_id is not None
+    from app.domain import balancing  # Local: balancing -> participants -> votes is fine.
+
+    before = balancing.signature(player)
     admins = await active_admin_ids(session, player.group_id)
     rows = await session.execute(
         select(PlayerSkillVote).where(PlayerSkillVote.player_id == player.id)
@@ -64,6 +67,8 @@ async def recompute(session: AsyncSession, player: PlayerProfile) -> None:
     if mobilities:
         player.mobility = VALUE_TO_MOBILITY[half_up_mean(mobilities)]
     await session.flush()
+    if balancing.signature(player) != before:
+        await balancing.invalidate_for_player(session, player.id)
 
 
 async def cast_vote(

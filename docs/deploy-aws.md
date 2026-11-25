@@ -105,8 +105,8 @@ Put the backup command in cron and copy the dump off the instance (S3 via
   app before the instance is public.
 - **The frontend uses the API only in `api` mode.** With the default
   `browser` build the deployed site is the localStorage prototype plus a
-  working API at `/api/v1/*`. In `api` mode, team balancing, skill voting
-  and single-game codes are disabled until they are stored on the server.
+  working API at `/api/v1/*`. In `api` mode, single-game codes and
+  participant-created games are unavailable until they are on the server.
 - **Single instance only.** Migrations run inside the backend container's
   start command; with more than one backend replica, run them once
   separately and drop them from the `CMD`.

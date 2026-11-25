@@ -60,6 +60,9 @@ class Game(Base):
             name="scores_require_draw",
         ),
         CheckConstraint(
+            "balance_window_starts_at < balance_window_ends_at", name="balance_window_order"
+        ),
+        CheckConstraint(
             "payment_deadline_days IS NULL OR payment_deadline_days BETWEEN 1 AND 7",
             name="payment_deadline_range",
         ),
@@ -103,6 +106,14 @@ class Game(Base):
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Migration 0005. The final rebalance is allowed inside this window; a
+    #: reschedule moves it, nothing else does.
+    balance_window_starts_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    balance_window_ends_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
     location: Mapped[str] = mapped_column(Text, server_default=text("''"), nullable=False)
     court_number: Mapped[str] = mapped_column(Text, server_default=text("''"), nullable=False)
