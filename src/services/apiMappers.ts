@@ -1,11 +1,19 @@
-import type { GameSession, Player, PlayerGroup } from "../types";
+import type {
+  GameSession,
+  GroupAdmin,
+  Player,
+  PlayerGroup,
+  PlayerSkillVote,
+} from "../types";
 import { endTimeFromDuration } from "../utils/game";
 import type {
   ApiGameDetail,
   ApiGroup,
+  ApiMember,
   ApiParticipant,
   ApiPlayer,
   ApiProfile,
+  ApiVote,
 } from "./apiRepository";
 
 /**
@@ -99,18 +107,57 @@ export const playerFromParticipant = (participant: ApiParticipant): Player => ({
   position: "neutro",
 });
 
+/** Merge per-attribute ballots into the UI's one-row-per-admin shape. */
+export const skillVotesFromApi = (votes: ApiVote[]): PlayerSkillVote[] => {
+  const byKey = new Map<string, PlayerSkillVote>();
+  for (const vote of votes) {
+    const key = `${vote.playerId}:${vote.adminUserId}`;
+    const entry = byKey.get(key) ?? {
+      playerId: localIdForApi(vote.playerId),
+      adminUserId: vote.adminUserId,
+      updatedAt: vote.updatedAt,
+    };
+    if (vote.attribute === "level") entry.level = vote.value;
+    else entry.mobility = vote.value as 1 | 2 | 3;
+    if (vote.updatedAt > entry.updatedAt) entry.updatedAt = vote.updatedAt;
+    byKey.set(key, entry);
+  }
+  return [...byKey.values()];
+};
+
+export const adminsFromApi = (members: ApiMember[]): GroupAdmin[] =>
+  members.flatMap((member) =>
+    member.role === "owner" || member.role === "admin"
+      ? [
+          {
+            userId: member.userId,
+            playerId: member.playerId ? localIdForApi(member.playerId) : undefined,
+            displayName: member.displayName,
+            role: member.role,
+            joinedAt: member.joinedAt,
+          },
+        ]
+      : [],
+  );
+
 export const groupFromApi = ({
   membership,
   directory,
   details,
   viewer,
   joinCode,
+  members,
+  votes = [],
 }: {
   membership: ApiGroup;
   directory: ApiPlayer[];
   details: ApiGameDetail[];
   viewer: ApiProfile;
   joinCode?: string;
+  /** Every active member; when absent only the viewer's own role is known. */
+  members?: ApiMember[];
+  /** Admin ballots; only loaded for admins. */
+  votes?: ApiVote[];
 }): PlayerGroup => {
   const playersById = new Map<number, Player>(
     directory.map((player) => {
@@ -135,9 +182,9 @@ export const groupFromApi = ({
     players: [...playersById.values()],
     games: details.map(gameFromApi),
     requests: [],
-    // Only the viewer's own role is known; it is all the UI needs to gate actions.
-    admins:
-      role === "owner" || role === "admin"
+    admins: members
+      ? adminsFromApi(members)
+      : role === "owner" || role === "admin"
         ? [
             {
               userId: viewer.id,
@@ -147,6 +194,6 @@ export const groupFromApi = ({
             },
           ]
         : [],
-    skillVotes: [],
+    skillVotes: skillVotesFromApi(votes),
   };
 };

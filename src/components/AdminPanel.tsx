@@ -46,6 +46,8 @@ export function AdminPanel({
   const eligiblePlayers = group.players
     .filter((player) => player.accessScope !== "game")
     .sort((first, second) => Number(isOwnPlayer(first)) - Number(isOwnPlayer(second)));
+  /** Admin invites, removal and group deletion are not on the server yet. */
+  const browserOnlyActions = runtimeConfig.dataSource !== "api";
   const [lastInvite, setLastInvite] = useState<string>("");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isLeaveOpen, setIsLeaveOpen] = useState(false);
@@ -84,6 +86,7 @@ export function AdminPanel({
             <button className="session-action-button view" onClick={onStatistics}>
               {localize("Estatísticas", language)}
             </button>
+            {browserOnlyActions && (
             <button
               className="secondary"
               disabled={!inviteCandidates.length}
@@ -95,7 +98,8 @@ export function AdminPanel({
             >
               {localize("Convidar admin", language)}
             </button>
-            {admins.some(
+            )}
+            {browserOnlyActions && admins.some(
               (admin) => admin.userId === user.id && admin.role === "owner",
             ) && (
               <button
@@ -127,7 +131,7 @@ export function AdminPanel({
                   {localize("Sair do grupo", language)}
                 </button>
               </span>
-            ) : admin.role !== "owner" && admins.length > 1 && (
+            ) : browserOnlyActions && admin.role !== "owner" && admins.length > 1 && (
               <button className="session-action-button delete" onClick={() => onRemoveAdmin(admin.userId)}>
                 {localize("Remover", language)}
               </button>
@@ -138,24 +142,13 @@ export function AdminPanel({
 
       <section className="panel admin-panel-section skill-voting-section">
         <h2>{localize("Votação de atributos", language)}</h2>
-        {runtimeConfig.dataSource !== "api" && (
-          <p className="admin-panel-help">
-            {localize(
-              "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.",
-              language,
-            )}
-          </p>
-        )}
-        {runtimeConfig.dataSource === "api" ? (
-          // Ballots are not stored on the server yet; a local vote would be
-          // lost on reload and never reach other admins.
-          <p className="admin-panel-help vote-unavailable">
-            {localize(
-              "A votação de atributos ainda não está disponível nesta versão. Ela voltará quando os votos forem salvos no servidor.",
-              language,
-            )}
-          </p>
-        ) : eligiblePlayers.map((player) => {
+        <p className="admin-panel-help">
+          {localize(
+            "Cada admin vota em todos os jogadores, inclusive em si. Cada voto atualiza a média imediatamente.",
+            language,
+          )}
+        </p>
+        {eligiblePlayers.map((player) => {
           const isSelf = isOwnPlayer(player);
           const votes = skillVotesFor(group, player.id);
           const levelVotes = votes.filter((vote) => vote.level !== undefined);

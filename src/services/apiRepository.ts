@@ -119,6 +119,23 @@ export type ApiPlayerDraft = {
   position?: ApiPlayer["position"];
 };
 
+export type ApiMember = {
+  userId: string;
+  displayName: string;
+  role: "owner" | "admin" | "participant";
+  joinedAt: string;
+  playerId: string | null;
+};
+
+/** One admin's ballot for one attribute: level 1-5, mobility 1-3. */
+export type ApiVote = {
+  playerId: string;
+  adminUserId: string;
+  attribute: "level" | "mobility";
+  value: number;
+  updatedAt: string;
+};
+
 const withToken = (token: string): HeadersInit => ({
   Authorization: `Bearer ${token}`,
 });
@@ -220,6 +237,31 @@ export const apiRepository = {
       headers: withToken(token),
       body: JSON.stringify(changes),
     }),
+  listMembers: (token: string, groupId: string) =>
+    apiFetch<ApiMember[]>(`/v1/groups/${groupId}/members`, {
+      headers: withToken(token),
+    }),
+  /** Admins only. */
+  listVotes: (token: string, groupId: string) =>
+    apiFetch<ApiVote[]>(`/v1/groups/${groupId}/votes`, {
+      headers: withToken(token),
+    }),
+  /** Record or (value null) withdraw the caller's ballot; returns the player. */
+  castVote: (
+    token: string,
+    groupId: string,
+    playerId: string,
+    attribute: ApiVote["attribute"],
+    value: number | null,
+  ) =>
+    apiFetch<ApiPlayer>(
+      `/v1/groups/${groupId}/players/${playerId}/votes/${attribute}`,
+      {
+        method: "PUT",
+        headers: withToken(token),
+        body: JSON.stringify({ value }),
+      },
+    ),
   archivePlayer: (token: string, groupId: string, playerId: string) =>
     apiFetch<void>(`/v1/groups/${groupId}/players/${playerId}`, {
       method: "DELETE",

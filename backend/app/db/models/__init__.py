@@ -7,7 +7,7 @@ from app.db.models.access import (
     NotificationRecipient,
 )
 from app.db.models.games import Game, GameParticipant
-from app.db.models.groups import Group, GroupMembership, PlayerProfile
+from app.db.models.groups import Group, GroupMembership, PlayerProfile, PlayerSkillVote
 from app.db.models.users import User, UserSession
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
     "Notification",
     "NotificationRecipient",
     "PlayerProfile",
+    "PlayerSkillVote",
     "User",
     "UserSession",
 ]

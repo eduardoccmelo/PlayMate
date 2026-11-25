@@ -1,8 +1,15 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
 
-from app.domain.enums import GroupRole, PlayerCondition, PlayerMobility, PlayerPosition
+from app.domain.enums import (
+    GroupRole,
+    PlayerCondition,
+    PlayerMobility,
+    PlayerPosition,
+    SkillAttribute,
+)
 from app.schemas.common import CamelModel
 
 
@@ -73,3 +80,25 @@ class UpdatePlayerRequest(CamelModel):
     mobility: PlayerMobility | None = None
     condition: PlayerCondition | None = None
     position: PlayerPosition | None = None
+
+
+class MemberResponse(CamelModel):
+    user_id: UUID
+    display_name: str
+    role: GroupRole
+    joined_at: datetime
+    #: The member's linked profile in this group.
+    player_id: UUID | None
+
+
+class VoteRequest(CamelModel):
+    #: null withdraws the ballot.
+    value: int | None
+
+
+class VoteResponse(CamelModel):
+    player_id: UUID
+    admin_user_id: UUID
+    attribute: SkillAttribute
+    value: int
+    updated_at: datetime

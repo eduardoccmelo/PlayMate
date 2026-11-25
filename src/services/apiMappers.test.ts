@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { gameFromApi, groupFromApi, localIdForApi } from "./apiMappers";
+import {
+  adminsFromApi,
+  gameFromApi,
+  groupFromApi,
+  localIdForApi,
+  skillVotesFromApi,
+} from "./apiMappers";
 import type {
   ApiGameDetail,
   ApiParticipant,
@@ -177,5 +183,33 @@ describe("groupFromApi", () => {
       viewer,
     });
     expect(group.admins).toEqual([]);
+  });
+});
+
+describe("skill votes and admins", () => {
+  const player = "55555555-0000-0000-0000-000000000000";
+
+  it("merges per-attribute ballots into one entry per admin and player", () => {
+    const votes = skillVotesFromApi([
+      { playerId: player, adminUserId: "a1", attribute: "level", value: 4, updatedAt: "2026-11-01T10:00:00Z" },
+      { playerId: player, adminUserId: "a1", attribute: "mobility", value: 3, updatedAt: "2026-11-02T10:00:00Z" },
+      { playerId: player, adminUserId: "a2", attribute: "level", value: 2, updatedAt: "2026-11-01T09:00:00Z" },
+    ]);
+    expect(votes).toEqual([
+      { playerId: localIdForApi(player), adminUserId: "a1", level: 4, mobility: 3, updatedAt: "2026-11-02T10:00:00Z" },
+      { playerId: localIdForApi(player), adminUserId: "a2", level: 2, updatedAt: "2026-11-01T09:00:00Z" },
+    ]);
+  });
+
+  it("lists only owners and admins, with their linked player", () => {
+    const admins = adminsFromApi([
+      { userId: "u1", displayName: "Owner", role: "owner", joinedAt: "t1", playerId: player },
+      { userId: "u2", displayName: "Member", role: "participant", joinedAt: "t2", playerId: null },
+      { userId: "u3", displayName: "Admin", role: "admin", joinedAt: "t3", playerId: null },
+    ]);
+    expect(admins.map((admin) => [admin.displayName, admin.role, admin.playerId])).toEqual([
+      ["Owner", "owner", localIdForApi(player)],
+      ["Admin", "admin", undefined],
+    ]);
   });
 });

@@ -257,5 +257,21 @@ async def leave_group(session: AsyncSession, *, group_id: UUID, user_id: UUID) -
         membership.role = GroupRole.ADMIN
         await session.flush()
         successor.role = GroupRole.OWNER
+    was_admin = membership.role in (GroupRole.OWNER, GroupRole.ADMIN)
     membership.left_at = utcnow()
     await session.flush()
+
+    if was_admin:
+        # Only active admins' ballots count, so a departing admin's votes
+        # stop shaping every average in the group.
+        from app.domain import votes as votes_domain
+
+        profiles = (
+            await session.execute(
+                select(PlayerProfile).where(
+                    PlayerProfile.group_id == group_id, PlayerProfile.archived_at.is_(None)
+                )
+            )
+        ).scalars().all()
+        for profile in profiles:
+            await votes_domain.recompute(session, profile)

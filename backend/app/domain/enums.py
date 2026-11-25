@@ -45,6 +45,11 @@ class PlayerPosition(StrEnum):
     NEUTRO = "neutro"
 
 
+class SkillAttribute(StrEnum):
+    LEVEL = "level"
+    MOBILITY = "mobility"
+
+
 class CurrencyCode(StrEnum):
     EUR = "EUR"
     USD = "USD"
@@ -107,6 +112,7 @@ PG_ENUMS: dict[str, type[StrEnum]] = {
     "player_condition": PlayerCondition,
     "player_position": PlayerPosition,
     "currency_code": CurrencyCode,
+    "player_skill_attribute": SkillAttribute,
     "participant_status": ParticipantStatus,
     "team_side": TeamSide,
     "request_kind": RequestKind,

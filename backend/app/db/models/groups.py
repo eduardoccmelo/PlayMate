@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    PrimaryKeyConstraint,
     SmallInteger,
     Text,
     Uuid,
@@ -15,7 +16,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, created_at_column, pg_enum, updated_at_column
-from app.domain.enums import GroupRole, PlayerCondition, PlayerMobility, PlayerPosition
+from app.domain.enums import (
+    GroupRole,
+    PlayerCondition,
+    PlayerMobility,
+    PlayerPosition,
+    SkillAttribute,
+)
 
 NORMALIZED = "lower(regexp_replace(trim(display_name), '[[:space:]]+', ' ', 'g'))"
 
@@ -132,3 +139,31 @@ class PlayerProfile(Base):
     legacy_ref: Mapped[str | None] = mapped_column(Text)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_column()
+
+
+class PlayerSkillVote(Base):
+    """One admin's ballot for one attribute of one player (migration 0004)."""
+
+    __tablename__ = "player_skill_votes"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "group_id", "player_id", "admin_user_id", "attribute", name="player_skill_votes_pkey"
+        ),
+        CheckConstraint(
+            "(attribute = 'level' AND value BETWEEN 1 AND 5)"
+            " OR (attribute = 'mobility' AND value BETWEEN 1 AND 3)",
+            name="value_range",
+        ),
+        Index("player_skill_votes_player_idx", "player_id"),
+    )
+
+    group_id: Mapped[UUID] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"))
+    player_id: Mapped[UUID] = mapped_column(
+        ForeignKey("player_profiles.id", ondelete="CASCADE")
+    )
+    admin_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    attribute: Mapped[SkillAttribute] = mapped_column(
+        pg_enum(SkillAttribute, "player_skill_attribute")
+    )
+    value: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    updated_at: Mapped[datetime] = updated_at_column()
