@@ -273,9 +273,14 @@ export function PlayMateApp() {
     const memberships = await apiRepository.listGroups(session.token);
     const loadedGroups = await Promise.all(
       memberships.map(async (membership) => {
-        const [directory, gameRows] = await Promise.all([
+        const isAdmin = membership.role === "owner" || membership.role === "admin";
+        const [directory, gameRows, members, votes] = await Promise.all([
           apiRepository.listPlayers(session.token, membership.id),
           apiRepository.listGames(session.token, membership.id),
+          apiRepository.listMembers(session.token, membership.id),
+          isAdmin
+            ? apiRepository.listVotes(session.token, membership.id)
+            : Promise.resolve([]),
         ]);
         const details = await Promise.all(
           gameRows.map((gameRow) => apiRepository.readGame(session.token, gameRow.id)),
@@ -286,6 +291,8 @@ export function PlayMateApp() {
           details,
           viewer: session.user,
           joinCode: apiJoinCodes.read(membership.id),
+          members,
+          votes,
         });
       }),
     );
@@ -2353,6 +2360,18 @@ export function PlayMateApp() {
           return code;
         }}
         onVote={(playerId, field, value) => {
+          if (runtimeConfig.dataSource === "api" && activeGroup.apiManaged) {
+            const session = apiRepository.readSession();
+            const player = activeGroup.players.find((candidate) => candidate.id === playerId);
+            if (!session || !player?.apiId) return;
+            void apiRepository
+              .castVote(session.token, activeGroup.id, player.apiId, field, value)
+              .then(refreshApiGroups)
+              .catch((error: unknown) =>
+                setSyncError(apiErrorText(error, "Não foi possível registrar o voto.")),
+              );
+            return;
+          }
           setGroups((currentGroups) => currentGroups.map((group) => {
             if (group.id !== activeGroup.id) return group;
             const player = group.players.find((candidate) => candidate.id === playerId);

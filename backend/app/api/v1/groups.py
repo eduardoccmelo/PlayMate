@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter
+from sqlalchemy import select
 
 from app.api.deps import (
     GroupAdminDep,
@@ -10,9 +11,12 @@ from app.api.deps import (
     SessionDep,
     ViewerDep,
 )
-from app.db.models import PlayerProfile
+from app.db.models import GroupMembership, PlayerProfile, User
 from app.domain import groups as groups_domain
 from app.domain import players as players_domain
+from app.domain import votes as votes_domain
+from app.domain.enums import SkillAttribute
+from app.domain.errors import ValidationFailed
 from app.schemas.groups import (
     ChangePasscodeRequest,
     CreateGroupRequest,
@@ -21,9 +25,12 @@ from app.schemas.groups import (
     GroupResponse,
     JoinCodeResponse,
     JoinGroupRequest,
+    MemberResponse,
     PlayerResponse,
     RenameGroupRequest,
     UpdatePlayerRequest,
+    VoteRequest,
+    VoteResponse,
 )
 
 router = APIRouter(tags=["groups"])
@@ -169,6 +176,7 @@ async def create_player(
         mobility=body.mobility,
         condition=body.condition,
         position=body.position,
+        creator_user_id=context.viewer.user.id,
     )
     return _player_response(player, context)
 
@@ -203,3 +211,68 @@ async def archive_player(player_id: UUID, context: GroupAdminDep, session: Sessi
         session, group_id=context.group.id, player_id=player_id
     )
     await players_domain.archive_player(session, player=player)
+
+
+@router.get("/groups/{group_id}/members", response_model=list[MemberResponse])
+async def list_members(context: GroupMemberDep, session: SessionDep) -> list[MemberResponse]:
+    rows = await session.execute(
+        select(GroupMembership, User, PlayerProfile.id)
+        .join(User, User.id == GroupMembership.user_id)
+        .outerjoin(
+            PlayerProfile,
+            (PlayerProfile.group_id == GroupMembership.group_id)
+            & (PlayerProfile.owner_user_id == GroupMembership.user_id),
+        )
+        .where(GroupMembership.group_id == context.group.id, GroupMembership.left_at.is_(None))
+        .order_by(GroupMembership.joined_at)
+    )
+    return [
+        MemberResponse(
+            user_id=membership.user_id,
+            display_name=user.display_name,
+            role=membership.role,
+            joined_at=membership.joined_at,
+            player_id=player_id,
+        )
+        for membership, user, player_id in rows.all()
+    ]
+
+
+@router.get("/groups/{group_id}/votes", response_model=list[VoteResponse])
+async def list_votes(context: GroupAdminDep, session: SessionDep) -> list[VoteResponse]:
+    """Admins only: ballots are skill data (docs/app-flow.md)."""
+    votes = await votes_domain.list_votes(session, group_id=context.group.id)
+    return [VoteResponse.model_validate(vote) for vote in votes]
+
+
+#: Valid ballot values per attribute.
+VOTE_RANGES = {SkillAttribute.LEVEL: range(1, 6), SkillAttribute.MOBILITY: range(1, 4)}
+
+
+@router.put(
+    "/groups/{group_id}/players/{player_id}/votes/{attribute}", response_model=PlayerResponse
+)
+async def cast_vote(
+    player_id: UUID,
+    attribute: SkillAttribute,
+    body: VoteRequest,
+    context: GroupAdminDep,
+    session: SessionDep,
+) -> PlayerResponse:
+    """Record, change or (value null) withdraw the caller's ballot. Admins
+    may vote on every player in the group, including themselves."""
+    if body.value is not None and body.value not in VOTE_RANGES[attribute]:
+        raise ValidationFailed(f"A {attribute} vote must be in {VOTE_RANGES[attribute]}")
+    player = await players_domain.get_player(
+        session, group_id=context.group.id, player_id=player_id
+    )
+    await votes_domain.cast_vote(
+        session,
+        player=player,
+        admin_user_id=context.viewer.user.id,
+        attribute=attribute,
+        value=body.value,
+    )
+    await votes_domain.recompute(session, player)
+    await session.refresh(player)
+    return _player_response(player, context)

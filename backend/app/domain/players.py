@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import normalize_name
 from app.core.time import utcnow
 from app.db.models import Game, GameParticipant, PlayerProfile
-from app.domain.enums import GameStatus, PlayerCondition, PlayerMobility, PlayerPosition
+from app.domain import votes as votes_domain
+from app.domain.enums import (
+    GameStatus,
+    PlayerCondition,
+    PlayerMobility,
+    PlayerPosition,
+    SkillAttribute,
+)
 from app.domain.errors import Conflict, NotFound, PermissionDenied
 from app.domain.participants import ACTIVE_STATUSES
 
@@ -63,8 +70,13 @@ async def create_guest(
     mobility: PlayerMobility,
     condition: PlayerCondition,
     position: PlayerPosition,
+    creator_user_id: UUID,
 ) -> PlayerProfile:
-    """A manual player without an account (the UI's "Guest" tag)."""
+    """A manual player without an account (the UI's "Guest" tag).
+
+    The level and mobility the admin enters are recorded as that admin's
+    first ballots (docs/app-flow.md), so later votes average with them.
+    """
     await _require_unique_name(session, group_id=group_id, display_name=display_name)
     player = PlayerProfile(
         group_id=group_id,
@@ -77,6 +89,21 @@ async def create_guest(
     )
     session.add(player)
     await session.flush()
+    if level is not None:
+        await votes_domain.cast_vote(
+            session,
+            player=player,
+            admin_user_id=creator_user_id,
+            attribute=SkillAttribute.LEVEL,
+            value=level,
+        )
+    await votes_domain.cast_vote(
+        session,
+        player=player,
+        admin_user_id=creator_user_id,
+        attribute=SkillAttribute.MOBILITY,
+        value=votes_domain.MOBILITY_TO_VALUE[mobility],
+    )
     return player
 
 
@@ -108,9 +135,29 @@ async def update_player(
         )
         changes = {**changes, "display_name": name}
 
+    # Ratings are aggregates: an admin's edit is recorded as their ballot,
+    # never written over the average (docs/backend-schema.md).
+    ballots: dict[SkillAttribute, int | None] = {}
+    if "level" in changes:
+        level = changes.pop("level")
+        ballots[SkillAttribute.LEVEL] = level if isinstance(level, int) else None
+    if "mobility" in changes:
+        mobility = changes.pop("mobility")
+        ballots[SkillAttribute.MOBILITY] = (
+            votes_domain.MOBILITY_TO_VALUE[PlayerMobility(str(mobility))]
+            if mobility is not None
+            else None
+        )
+
     for field, value in changes.items():
         setattr(player, field, value)
+    for attribute, value in ballots.items():
+        await votes_domain.cast_vote(
+            session, player=player, admin_user_id=actor_user_id, attribute=attribute, value=value
+        )
     await session.flush()
+    if ballots:
+        await votes_domain.recompute(session, player)
     await session.refresh(player)
     return player
 
