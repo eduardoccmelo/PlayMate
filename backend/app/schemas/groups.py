@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -55,6 +56,8 @@ class JoinCodeResponse(CamelModel):
 
 class PlayerResponse(CamelModel):
     id: UUID
+    #: "game" for a guest who belongs to one game only (no voting board).
+    access_scope: Literal["group", "game"] = "group"
     display_name: str
     #: The linked account, or None for a manual guest.
     owner_user_id: UUID | None

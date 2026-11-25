@@ -137,6 +137,11 @@ class PlayerProfile(Base):
         nullable=False,
     )
     legacy_ref: Mapped[str | None] = mapped_column(Text)
+    #: Migration 0006. Set for a manual guest added by a participant
+    #: organizer: it belongs to that game, not to the group's voting board.
+    scope_game_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("games.id", ondelete="SET NULL")
+    )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_column()
 

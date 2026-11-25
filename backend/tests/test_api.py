@@ -86,38 +86,6 @@ async def test_creating_a_group_makes_the_creator_an_owner(client: AsyncClient) 
     assert [group["role"] for group in groups.json()] == ["owner"]
 
 
-async def test_a_participant_cannot_create_a_game(client: AsyncClient) -> None:
-    """Rule 2."""
-    admin_token = await sign_in(client, "organizer@example.com", "Organizer")
-    created = await client.post(
-        "/v1/groups",
-        json={"name": "City Night", "organizerPasscode": "hunter2"},
-        headers=auth(admin_token),
-    )
-    group_id = created.json()["group"]["id"]
-    join_code = created.json()["joinCode"]
-
-    member_token = await sign_in(client, "member@example.com", "Member")
-    joined = await client.post(
-        "/v1/groups/join",
-        json={"joinCode": join_code, "displayName": "Member"},
-        headers=auth(member_token),
-    )
-    assert joined.status_code == 200, joined.text
-
-    response = await client.post(
-        f"/v1/groups/{group_id}/games",
-        json={
-            "gameDate": "2026-06-01",
-            "startTime": "19:00:00",
-            "durationMinutes": 75,
-            "maxPlayers": 4,
-        },
-        headers=auth(member_token),
-    )
-    assert response.status_code == 403
-
-
 async def test_joining_as_admin_requires_the_passcode(client: AsyncClient) -> None:
     admin_token = await sign_in(client, "organizer@example.com", "Organizer")
     created = await client.post(

@@ -142,11 +142,21 @@ async def rotate_join_code(context: GroupAdminDep, session: SessionDep) -> JoinC
     return JoinCodeResponse(join_code=join_code)
 
 
-def _player_response(player: PlayerProfile, context: GroupContext) -> PlayerResponse:
+def _player_response(
+    player: PlayerProfile, context: GroupContext, member_ids: set[UUID] | None = None
+) -> PlayerResponse:
     # Participants never see skill ratings, including their own (rule:
     # ratings come only from admin votes).
     show_skill = context.is_admin
+    # A game-only guest: an organizer's manual guest, or an account that
+    # reached a game by code without joining the group.
+    game_only = player.scope_game_id is not None or (
+        member_ids is not None
+        and player.owner_user_id is not None
+        and player.owner_user_id not in member_ids
+    )
     return PlayerResponse(
+        access_scope="game" if game_only else "group",
         id=player.id,
         display_name=player.display_name,
         owner_user_id=player.owner_user_id,
@@ -161,7 +171,17 @@ def _player_response(player: PlayerProfile, context: GroupContext) -> PlayerResp
 @router.get("/groups/{group_id}/players", response_model=list[PlayerResponse])
 async def list_players(context: GroupMemberDep, session: SessionDep) -> list[PlayerResponse]:
     players = await players_domain.list_players(session, group_id=context.group.id)
-    return [_player_response(player, context) for player in players]
+    member_ids = set(
+        (
+            await session.execute(
+                select(GroupMembership.user_id).where(
+                    GroupMembership.group_id == context.group.id,
+                    GroupMembership.left_at.is_(None),
+                )
+            )
+        ).scalars().all()
+    )
+    return [_player_response(player, context, member_ids) for player in players]
 
 
 @router.post("/groups/{group_id}/players", response_model=PlayerResponse, status_code=201)

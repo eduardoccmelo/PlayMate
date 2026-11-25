@@ -25,6 +25,7 @@ from app.db.base import Base, created_at_column, pg_enum, updated_at_column
 from app.domain.enums import (
     CancelReason,
     CurrencyCode,
+    GameCreatorRole,
     GameStatus,
     ParticipantStatus,
     TeamSide,
@@ -150,6 +151,12 @@ class Game(Base):
 
     legacy_ref: Mapped[str | None] = mapped_column(Text)
     created_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    #: Migration 0006. A participant creator organizes only this game.
+    created_by_role: Mapped[GameCreatorRole] = mapped_column(
+        pg_enum(GameCreatorRole, "game_creator_role"),
+        server_default=text("'admin'"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = created_at_column()
     updated_at: Mapped[datetime] = updated_at_column()
 

@@ -42,7 +42,7 @@ async def get_player(session: AsyncSession, *, group_id: UUID, player_id: UUID) 
     return player
 
 
-async def _require_unique_name(
+async def require_unique_name(
     session: AsyncSession, *, group_id: UUID, display_name: str, except_id: UUID | None = None
 ) -> None:
     """Rule 11: names are unique per group, case and whitespace insensitive.
@@ -77,7 +77,7 @@ async def create_guest(
     The level and mobility the admin enters are recorded as that admin's
     first ballots (docs/app-flow.md), so later votes average with them.
     """
-    await _require_unique_name(session, group_id=group_id, display_name=display_name)
+    await require_unique_name(session, group_id=group_id, display_name=display_name)
     player = PlayerProfile(
         group_id=group_id,
         owner_user_id=None,
@@ -130,7 +130,7 @@ async def update_player(
     if "display_name" in changes:
         name = str(changes["display_name"]).strip()
         assert player.group_id is not None
-        await _require_unique_name(
+        await require_unique_name(
             session, group_id=player.group_id, display_name=name, except_id=player.id
         )
         changes = {**changes, "display_name": name}

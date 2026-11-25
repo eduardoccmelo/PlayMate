@@ -49,6 +49,8 @@ export type ApiGame = {
   paymentInfo: string;
   playerNotice: string;
   createdByUserId: string;
+  /** A participant creator organizes only this game. */
+  createdByRole: "admin" | "participant";
   /** Set while a team split is active. Scores arrive as decimal strings. */
   teamsDrawnAt: string | null;
   teamAScore: string | number | null;
@@ -131,6 +133,8 @@ export type ApiGameDraft = {
 
 export type ApiPlayer = {
   id: string;
+  /** "game" for a guest who belongs to one game only. */
+  accessScope: "group" | "game";
   displayName: string;
   ownerUserId: string | null;
   isGuest: boolean;
@@ -139,6 +143,13 @@ export type ApiPlayer = {
   mobility: "rapido" | "neutro" | "lento" | null;
   condition: "boa" | "neutro" | "ruim";
   position: "goleiro" | "defesa" | "ataque" | "neutro";
+};
+
+/** A game reached by code, outside the viewer's group memberships. */
+export type ApiGuestGame = {
+  groupId: string;
+  groupName: string;
+  detail: ApiGameDetail;
 };
 
 export type ApiPlayerDraft = {
@@ -324,6 +335,32 @@ export const apiRepository = {
       method: "PATCH",
       headers: withToken(token),
       body: JSON.stringify(changes),
+    }),
+  /** Organizers only; the previous code stops working. */
+  rotateGameJoinCode: (token: string, gameId: string) =>
+    apiFetch<{ joinCode: string }>(`/v1/games/${gameId}/join-code`, {
+      method: "POST",
+      headers: withToken(token),
+    }),
+  /** Join one game by code; non-members get game-only access. */
+  joinGameByCode: (token: string, joinCode: string) =>
+    apiFetch<ApiGameDetail>("/v1/games/join", {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify({ joinCode }),
+    }),
+  listGuestGames: (token: string) =>
+    apiFetch<ApiGuestGame[]>("/v1/me/games", { headers: withToken(token) }),
+  /** An organizer's manual guest for one game, put straight on its list. */
+  addGameGuest: (
+    token: string,
+    gameId: string,
+    guest: { displayName: string; position: ApiPlayer["position"]; condition: ApiPlayer["condition"] },
+  ) =>
+    apiFetch<ApiGameDetail>(`/v1/games/${gameId}/guests`, {
+      method: "POST",
+      headers: withToken(token),
+      body: JSON.stringify(guest),
     }),
   /** One manual draw; the server enforces eligibility and the 3 + 1 quota. */
   drawTeams: (token: string, gameId: string) =>
