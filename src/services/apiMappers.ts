@@ -26,6 +26,58 @@ export const localIdForApi = (id: string) => {
   return Number.parseInt(prefix, 16) || 1;
 };
 
+const balanceFromApi = (
+  detail: ApiGameDetail,
+): Pick<
+  GameSession,
+  | "balanceCount"
+  | "lateRebalanceUsed"
+  | "balanceWindowStartAt"
+  | "balanceWindowEndAt"
+  | "balanceHistory"
+  | "lastScheduleChange"
+> => {
+  const { balance, lastScheduleChange } = detail;
+  const latest = balance.latest;
+  return {
+    balanceCount: balance.standardCount,
+    lateRebalanceUsed: balance.lateRebalanceUsed,
+    balanceWindowStartAt: balance.windowStartsAt,
+    balanceWindowEndAt: balance.windowEndsAt,
+    balanceHistory: latest
+      ? [
+          {
+            triggeredAt: latest.generatedAt,
+            type: latest.triggerType === "late_rebalance" ? "late-rebalance" : "admin",
+            adminName: latest.triggeredByName ?? undefined,
+            rescheduledByName: latest.rescheduledByName ?? undefined,
+            count: latest.standardBalanceNumber ?? undefined,
+          },
+        ]
+      : [],
+    lastScheduleChange: lastScheduleChange ?? undefined,
+  };
+};
+
+/** The active split, built from each confirmed participant's team. */
+const teamsFromApi = (
+  detail: ApiGameDetail,
+  playersById: Map<number, Player>,
+): GameSession["teams"] => {
+  if (!detail.game.teamsDrawnAt) return null;
+  const side = (team: "A" | "B") =>
+    detail.confirmed
+      .filter((participant) => participant.team === team)
+      .map((participant) => playersById.get(localIdForApi(participant.playerId)))
+      .filter((player): player is Player => Boolean(player));
+  return {
+    teamA: side("A"),
+    teamB: side("B"),
+    sumA: Number(detail.game.teamAScore ?? 0),
+    sumB: Number(detail.game.teamBScore ?? 0),
+  };
+};
+
 export const gameFromApi = (detail: ApiGameDetail): GameSession => {
   const { game, confirmed, waitingList: waiting } = detail;
   return {
@@ -67,7 +119,9 @@ export const gameFromApi = (detail: ApiGameDetail): GameSession => {
     paidPlayerIds: confirmed
       .filter((participant) => participant.paid)
       .map((participant) => localIdForApi(participant.playerId)),
+    // Filled in by groupFromApi, which knows every player record.
     teams: null,
+    ...balanceFromApi(detail),
     createdByUserId: game.createdByUserId,
     // Only group admins can create games on the server today.
     createdByRole: "admin",
@@ -180,7 +234,10 @@ export const groupFromApi = ({
     organizerPasscode: "",
     createdAt: "",
     players: [...playersById.values()],
-    games: details.map(gameFromApi),
+    games: details.map((detail) => ({
+      ...gameFromApi(detail),
+      teams: teamsFromApi(detail, playersById),
+    })),
     requests: [],
     admins: members
       ? adminsFromApi(members)

@@ -3233,17 +3233,6 @@ export function PlayMateApp() {
             </section>
             <aside className="side-column">
               <section className="teams-section team-balance-panel">
-                {runtimeConfig.dataSource === "api" ? (
-                  // Draws and their 3+1 quota are not stored on the server yet, so a
-                  // local draw would vanish on reload and could reset the quota.
-                  <p className="balance-info-box balance-unavailable">
-                    {localize(
-                      "O balanceamento de times ainda não está disponível nesta versão. Ele voltará quando os times forem salvos no servidor.",
-                      language,
-                    )}
-                  </p>
-                ) : (
-                  <>
                 <p className="balance-info-box">
                   {localize(
                     "O balanceamento é manual. Use-o quando a lista estiver pronta; cada jogo tem três tentativas regulares e uma tentativa final liberada 15 minutos antes do início.",
@@ -3318,6 +3307,21 @@ export function PlayMateApp() {
                       );
                       return;
                     }
+                    if (usesApiGroup && game.apiId) {
+                      // The server picks the split and enforces the 3 + 1 quota.
+                      const session = apiRepository.readSession();
+                      if (!session) return;
+                      setBalanceNotice("");
+                      void apiRepository
+                        .drawTeams(session.token, game.apiId)
+                        .then(refreshApiGroups)
+                        .catch((error: unknown) =>
+                          setBalanceNotice(
+                            apiErrorText(error, "Não foi possível gerar os times."),
+                          ),
+                        );
+                      return;
+                    }
                     const teams = generateBalancedTeams(balancePlayers, game.teams);
                     const isLateRebalance =
                       balanceCountOf(game) >= currentBalanceLimit;
@@ -3370,8 +3374,6 @@ export function PlayMateApp() {
                     language={language}
                     showPositions={!isParticipantGameManager}
                   />
-                )}
-                  </>
                 )}
               </section>
             </aside>

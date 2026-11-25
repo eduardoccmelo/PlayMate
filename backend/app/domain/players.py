@@ -149,6 +149,9 @@ async def update_player(
             else None
         )
 
+    from app.domain import balancing  # Local: avoids an import cycle.
+
+    before = balancing.signature(player)
     for field, value in changes.items():
         setattr(player, field, value)
     for attribute, value in ballots.items():
@@ -158,6 +161,9 @@ async def update_player(
     await session.flush()
     if ballots:
         await votes_domain.recompute(session, player)
+    # Compare with the state before *any* change (recompute only sees its own).
+    if balancing.signature(player) != before:
+        await balancing.invalidate_for_player(session, player.id)
     await session.refresh(player)
     return player
 

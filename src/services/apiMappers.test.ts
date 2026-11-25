@@ -58,6 +58,9 @@ const detail = (
     paymentInfo: "",
     playerNotice: "",
     createdByUserId: "user-admin",
+    teamsDrawnAt: null,
+    teamAScore: null,
+    teamBScore: null,
   },
   viewerAccess: {
     kind: "member",
@@ -72,6 +75,15 @@ const detail = (
   },
   confirmed,
   waitingList,
+  balance: {
+    standardCount: 0,
+    standardLimit: 3,
+    lateRebalanceUsed: false,
+    windowStartsAt: "2026-12-01T18:45:00Z",
+    windowEndsAt: "2026-12-01T20:30:00Z",
+    latest: null,
+  },
+  lastScheduleChange: null,
 });
 
 const directoryPlayer = (overrides: Partial<ApiPlayer>): ApiPlayer => ({
@@ -211,5 +223,48 @@ describe("skill votes and admins", () => {
       ["Owner", "owner", localIdForApi(player)],
       ["Admin", "admin", undefined],
     ]);
+  });
+});
+
+describe("team balance mapping", () => {
+  it("rebuilds the active split, the quota and the latest draw", () => {
+    const ann = participant({ id: "p-a", playerId: "aaaaaaaa-0000-0000-0000-000000000000", displayName: "Ann", team: "A" });
+    const bob = participant({ id: "p-b", playerId: "bbbbbbbb-0000-0000-0000-000000000000", displayName: "Bob", team: "B" });
+    const base = detail([ann, bob]);
+    const group = groupFromApi({
+      membership: { id: "group-1", name: "Night", publicSlug: "night", timezone: "Europe/Lisbon", role: "admin" },
+      directory: [],
+      details: [{
+        ...base,
+        game: { ...base.game, teamsDrawnAt: "2026-11-30T10:00:00Z", teamAScore: "3.25", teamBScore: "3.00" },
+        balance: {
+          ...base.balance,
+          standardCount: 2,
+          latest: {
+            triggerType: "organizer",
+            standardBalanceNumber: 2,
+            generatedAt: "2026-11-30T10:00:00Z",
+            triggeredByName: "Organizer",
+            rescheduledByName: null,
+          },
+        },
+      }],
+      viewer,
+    });
+    const game = group.games[0];
+    expect(game.teams?.teamA.map((player) => player.name)).toEqual(["Ann"]);
+    expect(game.teams?.teamB.map((player) => player.name)).toEqual(["Bob"]);
+    expect([game.teams?.sumA, game.teams?.sumB]).toEqual([3.25, 3]);
+    expect(game.balanceCount).toBe(2);
+    expect(game.balanceWindowStartAt).toBe("2026-12-01T18:45:00Z");
+    expect(game.balanceHistory).toEqual([
+      { triggeredAt: "2026-11-30T10:00:00Z", type: "admin", adminName: "Organizer", rescheduledByName: undefined, count: 2 },
+    ]);
+  });
+
+  it("shows no teams when no split is active", () => {
+    const game = gameFromApi(detail([participant({ team: null })]));
+    expect(game.teams).toBeNull();
+    expect(game.balanceHistory).toEqual([]);
   });
 });

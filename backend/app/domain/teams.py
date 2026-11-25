@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from itertools import combinations
 from math import ceil
+from random import Random
 from uuid import UUID
 
 from app.domain.enums import PlayerCondition, PlayerMobility, PlayerPosition
@@ -25,6 +26,13 @@ CONDITION_SCORES = {PlayerCondition.BOA: 0.25, PlayerCondition.RUIM: -0.25}
 #: Above this, an exhaustive search of every split gets expensive, so we fall
 #: back to greedy seeding plus pairwise improvement.
 EXHAUSTIVE_LIMIT = 20
+
+
+#: The previous active split as (team A ids, team B ids).
+PreviousSplit = tuple[frozenset[UUID], frozenset[UUID]]
+
+#: Recorded on every stored draw, so a later algorithm change is traceable.
+ALGORITHM_VERSION = "exhaustive-v2"
 
 
 class TeamDrawError(ValueError):
@@ -128,21 +136,39 @@ def _splits_goalkeepers(
     )
 
 
-def _exhaustive(players: list[DrawPlayer], team_a_size: int) -> list[DrawPlayer] | None:
+def _ranked_splits(
+    players: list[DrawPlayer], team_a_size: int
+) -> list[tuple[_Balance, list[DrawPlayer]]]:
+    """Every valid split as (balance, team A), best first. Stable, so ties
+    keep enumeration order like the frontend's sort."""
     total_goalkeepers = _count(players, lambda p: p.position is PlayerPosition.GOLEIRO)
-    best_team: list[DrawPlayer] | None = None
-    best_balance: _Balance | None = None
-
+    candidates: list[tuple[_Balance, list[DrawPlayer]]] = []
     for indices in combinations(range(len(players)), team_a_size):
         selected = set(indices)
         team_a = [players[index] for index in indices]
         team_b = [p for index, p in enumerate(players) if index not in selected]
         if not _splits_goalkeepers(team_a, team_b, total_goalkeepers):
             continue
-        balance = _balance_of(team_a, team_b)
-        if best_balance is None or balance < best_balance:
-            best_balance, best_team = balance, team_a
-    return best_team
+        candidates.append((_balance_of(team_a, team_b), team_a))
+    candidates.sort(key=lambda candidate: candidate[0])
+    return candidates
+
+
+def _is_same_split(team_a: list[DrawPlayer], previous: PreviousSplit, everyone: set[UUID]) -> bool:
+    """Swapping Team A and Team B is not a new split."""
+    ids = frozenset(player.identifier for player in team_a)
+    other = frozenset(everyone - ids)
+    first, second = previous
+    return (ids == first and other == second) or (ids == second and other == first)
+
+
+def _comparable(candidate: _Balance, best: _Balance) -> bool:
+    """The frontend's "comparably fair" tolerance for a re-draw."""
+    return (
+        candidate.position_difference == best.position_difference
+        and candidate.score_difference <= best.score_difference + 1.5
+        and candidate.attribute_difference <= best.attribute_difference + 2
+    )
 
 
 def _greedy(players: list[DrawPlayer], team_a_size: int) -> list[DrawPlayer]:
@@ -171,14 +197,33 @@ def _greedy(players: list[DrawPlayer], team_a_size: int) -> list[DrawPlayer]:
     return team_a
 
 
-def generate_balanced_teams(players: list[DrawPlayer]) -> DrawResult:
+def generate_balanced_teams(
+    players: list[DrawPlayer],
+    previous: PreviousSplit | None = None,
+    rng: Random | None = None,
+) -> DrawResult:
+    """Draw two teams. With `previous`, prefer a genuinely different split
+    that is comparably fair (docs/backend-schema.md: "a new snapshot ...
+    must prefer a different comparably fair player split when one exists"),
+    chosen at random among those, as the frontend does."""
     validate_draw_players(players)
     if len(players) < 2:
         raise TeamDrawError("A draw needs at least two confirmed players")
 
     team_a_size = ceil(len(players) / 2)
     if len(players) <= EXHAUSTIVE_LIMIT:
-        team_a = _exhaustive(players, team_a_size) or players[:team_a_size]
+        ranked = _ranked_splits(players, team_a_size)
+        team_a = ranked[0][1] if ranked else players[:team_a_size]
+        if previous is not None and ranked:
+            everyone = {player.identifier for player in players}
+            best = ranked[0][0]
+            alternatives = [
+                split
+                for balance, split in ranked
+                if _comparable(balance, best) and not _is_same_split(split, previous, everyone)
+            ]
+            if alternatives:
+                team_a = (rng or Random()).choice(alternatives)
     else:
         team_a = _greedy(players, team_a_size)
 

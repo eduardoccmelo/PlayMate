@@ -135,10 +135,10 @@ export const translations: Record<
     Excluir: "Delete",
     Cancelar: "Cancel",
     Fechar: "Close",
+    "Não foi possível gerar os times.":
+      "We could not draw the teams.",
     "Não foi possível registrar o voto.":
       "We could not record the vote.",
-    "O balanceamento de times ainda não está disponível nesta versão. Ele voltará quando os times forem salvos no servidor.":
-      "Team balancing is not available in this version yet. It will return once teams are saved on the server.",
     "Entre na sua conta para salvar o jogador.":
       "Sign in to save the player.",
     "Este jogador não está vinculado ao servidor.":

@@ -45,6 +45,11 @@ class PlayerPosition(StrEnum):
     NEUTRO = "neutro"
 
 
+class TeamBalanceTrigger(StrEnum):
+    ORGANIZER = "organizer"
+    LATE_REBALANCE = "late_rebalance"
+
+
 class SkillAttribute(StrEnum):
     LEVEL = "level"
     MOBILITY = "mobility"
@@ -113,6 +118,7 @@ PG_ENUMS: dict[str, type[StrEnum]] = {
     "player_position": PlayerPosition,
     "currency_code": CurrencyCode,
     "player_skill_attribute": SkillAttribute,
+    "team_balance_trigger": TeamBalanceTrigger,
     "participant_status": ParticipantStatus,
     "team_side": TeamSide,
     "request_kind": RequestKind,

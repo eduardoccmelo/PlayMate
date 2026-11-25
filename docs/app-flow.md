@@ -30,8 +30,8 @@ the local workspace in `browser` mode, while in `api` mode
 (`VITE_DATA_SOURCE=api`) `apiRepository` loads identity, groups, the group
 player directory, games and rosters from the server and `apiMappers` adapts
 them to the UI model. Payment tracking, deadlines and overdue moves are
-server-side, and so are admin skill ballots. Team draws and single-game guest
-access are not server-backed yet, so API mode disables them with a note; participant-created
+server-side, and so are admin skill ballots and team draws with their 3 + 1
+quota. Single-game guest access is not server-backed yet, so API mode hides it; participant-created
 games are unavailable in API mode. Demo seed data loads
 automatically only in local development; a deployed demo must explicitly set
 `VITE_DEMO_SEED=true`.

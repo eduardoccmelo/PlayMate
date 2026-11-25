@@ -1,7 +1,7 @@
 """Game scheduling and the viewer's calculated permissions."""
 
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -21,6 +21,8 @@ from app.domain.errors import Conflict, NotFound
 from app.domain.groups import find_membership, get_group
 
 JOIN_CODE_LENGTH = 8
+#: The one final rebalance opens this long before kickoff.
+FINAL_REBALANCE_LEAD = timedelta(minutes=15)
 
 
 @dataclass
@@ -73,6 +75,8 @@ async def create_game(
         duration_minutes=duration_minutes,
         starts_at=starts_at,
         ends_at=ends_at,
+        balance_window_starts_at=starts_at - FINAL_REBALANCE_LEAD,
+        balance_window_ends_at=ends_at,
         max_players=max_players,
         created_by_user_id=created_by_user_id,
         **fields,
@@ -105,6 +109,9 @@ def recompute_schedule(game: Game, group: Group) -> None:
     game.starts_at, game.end_time, game.ends_at = wall_clock_window(
         game.game_date, game.start_time, game.duration_minutes, group.timezone
     )
+    # The final-rebalance window follows the schedule; the quota does not.
+    game.balance_window_starts_at = game.starts_at - FINAL_REBALANCE_LEAD
+    game.balance_window_ends_at = game.ends_at
 
 
 async def cancel_game(

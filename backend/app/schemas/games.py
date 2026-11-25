@@ -9,6 +9,7 @@ from app.domain.enums import (
     CurrencyCode,
     GameStatus,
     ParticipantStatus,
+    TeamBalanceTrigger,
     TeamSide,
 )
 from app.schemas.common import CamelModel
@@ -104,11 +105,42 @@ class ViewerAccessResponse(CamelModel):
     can_manage_game: bool
 
 
+class BalanceEntryResponse(CamelModel):
+    trigger_type: TeamBalanceTrigger
+    standard_balance_number: int | None
+    generated_at: datetime
+    #: Who drew; only sent to viewers who manage the game.
+    triggered_by_name: str | None
+    #: Who moved the game earlier, when that opened the final window early.
+    rescheduled_by_name: str | None
+
+
+class BalanceSummaryResponse(CamelModel):
+    """The 3 + 1 quota and the final-rebalance window."""
+
+    standard_count: int
+    standard_limit: int
+    late_rebalance_used: bool
+    window_starts_at: datetime
+    window_ends_at: datetime
+    latest: BalanceEntryResponse | None
+
+
+class ScheduleChangeResponse(CamelModel):
+    previous_starts_at: datetime
+    current_starts_at: datetime
+    changed_at: datetime
+    changed_by_name: str
+    was_brought_forward: bool
+
+
 class GameDetailResponse(CamelModel):
     game: GameResponse
     viewer_access: ViewerAccessResponse
     confirmed: list[ParticipantResponse]
     waiting_list: list[ParticipantResponse]
+    balance: BalanceSummaryResponse
+    last_schedule_change: ScheduleChangeResponse | None
 
 
 class CreateGameResponse(CamelModel):
