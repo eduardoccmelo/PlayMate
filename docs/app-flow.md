@@ -31,10 +31,10 @@ the local workspace in `browser` mode, while in `api` mode
 player directory, games and rosters from the server and `apiMappers` adapts
 them to the UI model. Payment tracking, deadlines and overdue moves are
 server-side, and so are admin skill ballots and team draws with their 3 + 1
-quota. Single-game guest access is not server-backed yet, so API mode hides it; participant-created
-games are unavailable in API mode. Demo seed data loads
-automatically only in local development; a deployed demo must explicitly set
-`VITE_DEMO_SEED=true`.
+quota, game-only guest access by code, and participant-created games. Admin
+invitations, admin removal and group deletion are still browser-only and
+hidden in API mode. Demo seed data loads automatically only in local
+development; a deployed demo must explicitly set `VITE_DEMO_SEED=true`.
 
 ## Groups and game access
 

@@ -7,8 +7,11 @@ from pydantic import Field
 from app.domain.enums import (
     CancelReason,
     CurrencyCode,
+    GameCreatorRole,
     GameStatus,
     ParticipantStatus,
+    PlayerCondition,
+    PlayerPosition,
     TeamBalanceTrigger,
     TeamSide,
 )
@@ -89,6 +92,7 @@ class GameResponse(CamelModel):
     team_a_score: Decimal | None
     team_b_score: Decimal | None
     created_by_user_id: UUID
+    created_by_role: GameCreatorRole
 
 
 class ViewerAccessResponse(CamelModel):
@@ -162,5 +166,27 @@ class ReorderRequest(CamelModel):
     ordered_ids: list[UUID]
 
 
+class JoinGameByCodeRequest(CamelModel):
+    join_code: str
+
+
+class GameJoinCodeResponse(CamelModel):
+    join_code: str
+
+
+class CreateGameGuestRequest(CamelModel):
+    display_name: str = Field(min_length=1, max_length=80)
+    position: PlayerPosition = PlayerPosition.NEUTRO
+    condition: PlayerCondition = PlayerCondition.NEUTRO
+
+
 class CancelGameRequest(CamelModel):
     reason: CancelReason = CancelReason.MANUAL
+
+
+class GuestGameResponse(CamelModel):
+    """A game the viewer reaches by code, outside group membership."""
+
+    group_id: UUID
+    group_name: str
+    detail: GameDetailResponse

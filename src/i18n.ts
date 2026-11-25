@@ -135,6 +135,8 @@ export const translations: Record<
     Excluir: "Delete",
     Cancelar: "Cancel",
     Fechar: "Close",
+    "Entre na sua conta para entrar neste jogo.":
+      "Sign in to join this game.",
     "Não foi possível gerar os times.":
       "We could not draw the teams.",
     "Não foi possível registrar o voto.":

@@ -1,5 +1,4 @@
 import { Fragment, useState, type FormEvent } from "react";
-import { runtimeConfig } from "../config/runtime";
 import { localize, type Language } from "../i18n";
 import type { CurrentUser, GameSession, PlayerGroup } from "../types";
 import { hasGameEnded, normalizeText, weekdayName } from "../utils/game";
@@ -31,7 +30,7 @@ type GroupSelectorProps = {
   onRequestJoinCode?: (groupId: string) => Promise<string>;
   myGames: GameSession[];
   onJoinGroup: (code: string, passcode: string) => string | null | Promise<string | null>;
-  onAddMyGame: (code: string) => string | null;
+  onAddMyGame: (code: string) => string | null | Promise<string | null>;
   onOpenMyGame: (game: GameSession) => void;
   onLeaveMyGame: (game: GameSession) => void;
 };
@@ -260,9 +259,9 @@ export function GroupSelector({
     setJoinPasscode("");
     setJoinError("");
   };
-  const addMyGame = (event: FormEvent) => {
+  const addMyGame = async (event: FormEvent) => {
     event.preventDefault();
-    const error = onAddMyGame(gameCode);
+    const error = await onAddMyGame(gameCode);
     if (error) {
       setGameCodeError(error);
       return;
@@ -635,17 +634,14 @@ export function GroupSelector({
                 )}
               </h1>
             </div>
-            {/* Single-game guest access is not on the server yet (API mode). */}
-            {runtimeConfig.dataSource !== "api" && (
-              <div className="game-directory-actions">
-                <button
-                  className="secondary"
-                  onClick={() => setIsAddingGame(true)}
-                >
-                  {localize("Tenho um código de jogo", language)}
-                </button>
-              </div>
-            )}
+            <div className="game-directory-actions">
+              <button
+                className="secondary"
+                onClick={() => setIsAddingGame(true)}
+              >
+                {localize("Tenho um código de jogo", language)}
+              </button>
+            </div>
           </div>
           <section className="panel group-list my-games-list">
             {myGames.length ? (
@@ -701,7 +697,8 @@ export function GroupSelector({
               </p>
             )}
           </section>
-          {availableGames.length > 0 && (
+          {/* A browser-mode demo hint; API games have server-issued codes. */}
+          {availableGames.length > 0 && !groups.some((group) => group.apiManaged) && (
             <section className="available-code-copy">
               <span className="available-code-label">
                 {language === "pt"

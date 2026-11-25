@@ -3,6 +3,7 @@ import {
   adminsFromApi,
   gameFromApi,
   groupFromApi,
+  guestGroupFromApi,
   localIdForApi,
   skillVotesFromApi,
 } from "./apiMappers";
@@ -58,6 +59,7 @@ const detail = (
     paymentInfo: "",
     playerNotice: "",
     createdByUserId: "user-admin",
+    createdByRole: "admin",
     teamsDrawnAt: null,
     teamAScore: null,
     teamBScore: null,
@@ -88,6 +90,7 @@ const detail = (
 
 const directoryPlayer = (overrides: Partial<ApiPlayer>): ApiPlayer => ({
   id: "22222222-2222-2222-2222-222222222222",
+  accessScope: "group",
   displayName: "Guest",
   ownerUserId: null,
   isGuest: true,
@@ -266,5 +269,23 @@ describe("team balance mapping", () => {
     const game = gameFromApi(detail([participant({ team: null })]));
     expect(game.teams).toBeNull();
     expect(game.balanceHistory).toEqual([]);
+  });
+});
+
+describe("guestGroupFromApi", () => {
+  it("holds only the coded games and marks the viewer's own entry game-only", () => {
+    const own = participant({ id: "p-me", playerId: "cccccccc-0000-0000-0000-000000000000", userId: viewer.id, displayName: "Alex" });
+    const other = participant({ id: "p-o", playerId: "dddddddd-0000-0000-0000-000000000000", userId: "user-x", displayName: "Xavi" });
+    const base = detail([own, other]);
+    const group = guestGroupFromApi(
+      [{ groupId: "group-9", groupName: "Elsewhere", detail: { ...base, game: { ...base.game, createdByRole: "participant" } } }],
+      viewer,
+    );
+    expect(group).toMatchObject({ id: "group-9", name: "Elsewhere", guestOnly: true, admins: [] });
+    expect(group.games).toHaveLength(1);
+    expect(group.games[0].createdByRole).toBe("participant");
+    const me = group.players.find((player) => player.ownerUserId === viewer.id);
+    expect(me?.accessScope).toBe("game");
+    expect(group.players.find((player) => player.name === "Xavi")?.accessScope).toBe("group");
   });
 });

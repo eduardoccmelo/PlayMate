@@ -7,7 +7,6 @@ from app.api.deps import (
     GameContext,
     GameManagerDep,
     GameViewerDep,
-    GroupAdminDep,
     GroupMemberDep,
     SessionDep,
     ViewerDep,
@@ -15,17 +14,22 @@ from app.api.deps import (
 from app.db.models import Game, GameParticipant, GameScheduleChange, PlayerProfile, User
 from app.domain import balancing as balancing_domain
 from app.domain import games as games_domain
+from app.domain import guests as guests_domain
 from app.domain import participants as participants_domain
-from app.domain.enums import GameStatus, ParticipantStatus
+from app.domain.enums import GameCreatorRole, GameStatus, ParticipantStatus
 from app.domain.errors import NotFound, PermissionDenied
 from app.schemas.games import (
     BalanceEntryResponse,
     BalanceSummaryResponse,
     CancelGameRequest,
+    CreateGameGuestRequest,
     CreateGameRequest,
     CreateGameResponse,
     GameDetailResponse,
+    GameJoinCodeResponse,
     GameResponse,
+    GuestGameResponse,
+    JoinGameByCodeRequest,
     JoinGameRequest,
     ParticipantResponse,
     PaymentRequest,
@@ -116,9 +120,11 @@ async def _detail(session: SessionDep, context: GameContext) -> GameDetailRespon
             trigger_type=state.latest.trigger_type,
             standard_balance_number=state.latest.standard_balance_number,
             generated_at=state.latest.generated_at,
+            # Group admins only: a participant organizer must not learn which
+            # admin acted (docs/backend-schema.md).
             triggered_by_name=(
                 await _user_name(session, state.latest.triggered_by_user_id)
-                if context.access.can_manage_game
+                if context.access.kind == "admin"
                 else None
             ),
             rescheduled_by_name=opened_by,
@@ -168,13 +174,18 @@ async def list_games(context: GroupMemberDep, session: SessionDep) -> list[GameR
 
 @router.post("/groups/{group_id}/games", response_model=CreateGameResponse, status_code=201)
 async def create_game(
-    body: CreateGameRequest, context: GroupAdminDep, session: SessionDep
+    body: CreateGameRequest, context: GroupMemberDep, session: SessionDep
 ) -> CreateGameResponse:
+    """Any member may create a game. A participant creator organizes only
+    that game and gains no group-admin rights (docs/app-flow.md)."""
     tracking = body.payment_tracking_enabled
     created = await games_domain.create_game(
         session,
         group_id=context.group.id,
         created_by_user_id=context.viewer.user.id,
+        created_by_role=(
+            GameCreatorRole.ADMIN if context.is_admin else GameCreatorRole.PARTICIPANT
+        ),
         game_date=body.game_date,
         start_time=body.start_time,
         duration_minutes=body.duration_minutes,
@@ -256,6 +267,58 @@ async def cancel_game(
         session, game_id=context.game.id, reason=body.reason
     )
     return GameResponse.model_validate(game)
+
+
+@router.post("/games/join", response_model=GameDetailResponse)
+async def join_by_code(
+    body: JoinGameByCodeRequest, session: SessionDep, viewer: ViewerDep
+) -> GameDetailResponse:
+    """Join one game by its code. A non-member gets game-only access and
+    goes straight onto the list; group membership is never granted."""
+    game = await guests_domain.join_by_code(session, join_code=body.join_code, user=viewer.user)
+    access = await games_domain.viewer_access(session, game=game, user_id=viewer.user.id)
+    return await _detail(session, GameContext(game=game, access=access, viewer=viewer))
+
+
+@router.get("/me/games", response_model=list[GuestGameResponse])
+async def my_guest_games(session: SessionDep, viewer: ViewerDep) -> list[GuestGameResponse]:
+    """Games reached by code, outside the viewer's group memberships."""
+    responses: list[GuestGameResponse] = []
+    for entry in await guests_domain.guest_games(session, user_id=viewer.user.id):
+        await participants_domain.sweep_payment_deadlines(session, game_id=entry.game.id)
+        access = await games_domain.viewer_access(
+            session, game=entry.game, user_id=viewer.user.id
+        )
+        context = GameContext(game=entry.game, access=access, viewer=viewer)
+        responses.append(
+            GuestGameResponse(
+                group_id=entry.group.id,
+                group_name=entry.group.name,
+                detail=await _detail(session, context),
+            )
+        )
+    return responses
+
+
+@router.post("/games/{game_id}/join-code", response_model=GameJoinCodeResponse)
+async def rotate_join_code(context: GameManagerDep, session: SessionDep) -> GameJoinCodeResponse:
+    code = await guests_domain.rotate_game_join_code(session, context.game)
+    return GameJoinCodeResponse(join_code=code)
+
+
+@router.post("/games/{game_id}/guests", response_model=GameDetailResponse, status_code=201)
+async def add_game_guest(
+    body: CreateGameGuestRequest, context: GameManagerDep, session: SessionDep
+) -> GameDetailResponse:
+    """An organizer's manual guest for this game only."""
+    await guests_domain.add_game_guest(
+        session,
+        game=context.game,
+        display_name=body.display_name,
+        position=body.position,
+        condition=body.condition,
+    )
+    return await _detail(session, context)
 
 
 @router.post("/games/{game_id}/team-balance", response_model=GameDetailResponse)

@@ -45,6 +45,11 @@ class PlayerPosition(StrEnum):
     NEUTRO = "neutro"
 
 
+class GameCreatorRole(StrEnum):
+    ADMIN = "admin"
+    PARTICIPANT = "participant"
+
+
 class TeamBalanceTrigger(StrEnum):
     ORGANIZER = "organizer"
     LATE_REBALANCE = "late_rebalance"
@@ -119,6 +124,7 @@ PG_ENUMS: dict[str, type[StrEnum]] = {
     "currency_code": CurrencyCode,
     "player_skill_attribute": SkillAttribute,
     "team_balance_trigger": TeamBalanceTrigger,
+    "game_creator_role": GameCreatorRole,
     "participant_status": ParticipantStatus,
     "team_side": TeamSide,
     "request_kind": RequestKind,

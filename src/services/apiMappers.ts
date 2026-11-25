@@ -9,6 +9,7 @@ import { endTimeFromDuration } from "../utils/game";
 import type {
   ApiGameDetail,
   ApiGroup,
+  ApiGuestGame,
   ApiMember,
   ApiParticipant,
   ApiPlayer,
@@ -123,8 +124,7 @@ export const gameFromApi = (detail: ApiGameDetail): GameSession => {
     teams: null,
     ...balanceFromApi(detail),
     createdByUserId: game.createdByUserId,
-    // Only group admins can create games on the server today.
-    createdByRole: "admin",
+    createdByRole: game.createdByRole,
   };
 };
 
@@ -136,7 +136,7 @@ export const playerFromApi = (player: ApiPlayer): Player => ({
   name: player.displayName,
   ownerUserId: player.ownerUserId ?? undefined,
   isGuest: player.isGuest,
-  accessScope: "group",
+  accessScope: player.accessScope,
   // Non-admins receive no skill data; neutral placeholders keep the UI typed.
   level: player.level ?? 3,
   mobility: player.mobility ?? mobilityDefault,
@@ -252,5 +252,40 @@ export const groupFromApi = ({
           ]
         : [],
     skillVotes: skillVotesFromApi(votes),
+  };
+};
+
+/**
+ * A group the viewer reaches only through game codes: just those games, the
+ * players on their lists, and the viewer's own entries marked game-only so
+ * the group never shows up as a membership.
+ */
+export const guestGroupFromApi = (
+  entries: ApiGuestGame[],
+  viewer: ApiProfile,
+): PlayerGroup => {
+  const playersById = new Map<number, Player>();
+  for (const { detail } of entries) {
+    for (const participant of [...detail.confirmed, ...detail.waitingList]) {
+      const player = playerFromParticipant(participant);
+      if (participant.userId === viewer.id) player.accessScope = "game";
+      playersById.set(player.id, player);
+    }
+  }
+  return {
+    id: entries[0].groupId,
+    apiManaged: true,
+    guestOnly: true,
+    name: entries[0].groupName,
+    organizerPasscode: "",
+    createdAt: "",
+    players: [...playersById.values()],
+    games: entries.map(({ detail }) => ({
+      ...gameFromApi(detail),
+      teams: teamsFromApi(detail, playersById),
+    })),
+    requests: [],
+    admins: [],
+    skillVotes: [],
   };
 };

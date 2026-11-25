@@ -13,11 +13,16 @@ import type { SavedProfile } from "../services/browserAppRepository";
 import {
   apiJoinCodes,
   apiRepository,
+  type ApiGuestGame,
   type ApiPlayerDraft,
   type ApiProfile,
   type ApiSession,
 } from "../services/apiRepository";
-import { groupFromApi, localIdForApi } from "../services/apiMappers";
+import {
+  groupFromApi,
+  guestGroupFromApi,
+  localIdForApi,
+} from "../services/apiMappers";
 import { ApiError } from "../services/apiClient";
 import {
   generateBalancedTeams,
@@ -270,8 +275,11 @@ export function PlayMateApp() {
   const refreshApiGroups = useCallback(async () => {
     const session = apiRepository.readSession();
     if (!session) return;
-    const memberships = await apiRepository.listGroups(session.token);
-    const loadedGroups = await Promise.all(
+    const [memberships, guestGames] = await Promise.all([
+      apiRepository.listGroups(session.token),
+      apiRepository.listGuestGames(session.token),
+    ]);
+    const memberGroups = await Promise.all(
       memberships.map(async (membership) => {
         const isAdmin = membership.role === "owner" || membership.role === "admin";
         const [directory, gameRows, members, votes] = await Promise.all([
@@ -296,6 +304,18 @@ export function PlayMateApp() {
         });
       }),
     );
+    // Games reached by code only, grouped by their group (never a membership).
+    const guestEntries = new Map<string, ApiGuestGame[]>();
+    for (const entry of guestGames) {
+      if (memberships.some((membership) => membership.id === entry.groupId)) continue;
+      guestEntries.set(entry.groupId, [...(guestEntries.get(entry.groupId) ?? []), entry]);
+    }
+    const loadedGroups = [
+      ...memberGroups,
+      ...[...guestEntries.values()].map((entries) =>
+        guestGroupFromApi(entries, session.user),
+      ),
+    ];
     setGroups(loadedGroups);
     setCurrentUser((user) => user
       ? {
@@ -658,6 +678,8 @@ export function PlayMateApp() {
   const [notice, setNotice] = useState("");
   /** Last failed server write in API mode, shown on every page. */
   const [syncError, setSyncError] = useState("");
+  /** API mode: the shareable code for the open game (server keeps a hash). */
+  const [apiGameCodes, setApiGameCodes] = useState<Record<string, string>>({});
   const [balanceNotice, setBalanceNotice] = useState("");
   const [cancellationNotice, setCancellationNotice] = useState("");
   const [gameToDelete, setGameToDelete] = useState<GameSession | null>(null);
@@ -763,6 +785,30 @@ export function PlayMateApp() {
   }, []);
   const usesApiGroup =
     runtimeConfig.dataSource === "api" && Boolean(activeGroup?.apiManaged);
+  /** Reuse this device's last code for a game, or ask the server for one. */
+  const ensureApiGameCode = async (apiGameId: string) => {
+    const key = `game:${apiGameId}`;
+    const cached = apiJoinCodes.read(key);
+    if (cached) {
+      setApiGameCodes((codes) => ({ ...codes, [apiGameId]: cached }));
+      return;
+    }
+    const session = apiRepository.readSession();
+    if (!session) return;
+    try {
+      const { joinCode } = await apiRepository.rotateGameJoinCode(session.token, apiGameId);
+      apiJoinCodes.save(key, joinCode);
+      setApiGameCodes((codes) => ({ ...codes, [apiGameId]: joinCode }));
+    } catch (error) {
+      setSyncError(apiErrorText(error, "Não foi possível gerar o código."));
+    }
+  };
+  const shownGameCode =
+    game && activeGroup
+      ? usesApiGroup && game.apiId
+        ? (apiGameCodes[game.apiId] ?? "")
+        : gameInviteCode(activeGroup, game)
+      : "";
   /** Persist a directory player on the server; resolves to an error message. */
   const saveApiPlayer = async (
     existing: Player | null,
@@ -793,6 +839,13 @@ export function PlayMateApp() {
             ? full
             : { condition: draft.condition, position: draft.position },
         );
+      } else if (!isAdmin && joinGameId) {
+        // A participant organizer adds a guest to their game only.
+        await apiRepository.addGameGuest(session.token, joinGameId, {
+          displayName: draft.name,
+          position: draft.position,
+          condition: draft.condition,
+        });
       } else {
         const created = await apiRepository.createPlayer(session.token, activeGroup.id, full);
         if (joinGameId) await apiRepository.joinGame(session.token, joinGameId, created.id);
@@ -2056,7 +2109,22 @@ export function PlayMateApp() {
           );
         }}
         onLeaveMyGame={leaveMyGame}
-        onAddMyGame={(code) => {
+        onAddMyGame={async (code) => {
+          if (runtimeConfig.dataSource === "api") {
+            const session = apiRepository.readSession();
+            if (!session) return "Entre na sua conta para entrar neste jogo.";
+            try {
+              const detail = await apiRepository.joinGameByCode(session.token, code);
+              await refreshApiGroups();
+              setActiveGroupId(detail.game.groupId);
+              setGameId(localIdForApi(detail.game.id));
+              setReturnToDashboardAfterGame(true);
+              setAccess("player");
+              return null;
+            } catch (error) {
+              return apiErrorText(error, "Código de jogo inválido.");
+            }
+          }
           const match = groups
             .flatMap((group) =>
               group.games.map((gameSession) => ({ group, gameSession })),
@@ -2198,7 +2266,7 @@ export function PlayMateApp() {
         }}
         canCreateGame={Boolean(
           activeGroup &&
-            runtimeConfig.dataSource !== "api" &&
+            !activeGroup.guestOnly &&
             !adminGroupIds.includes(activeGroup.id) &&
             players.some(
               (player) =>
@@ -2206,13 +2274,44 @@ export function PlayMateApp() {
                 isCurrentUserPlayer(player, currentUser),
             ),
         )}
-        onCreateGame={(draft) => {
+        onCreateGame={async (draft) => {
           if (!isValidIsoDate(draft.date))
             return "Informe uma data válida no formato DD/MM/AAAA.";
           if (
-            new Date(`${draft.date}T${draft.time}:00`).getTime() <= Date.now()
+            new Date(`${draft.date}T${draft.time}:00`).getTime() <= clock
           )
             return "Não é possível criar um jogo em um horário passado.";
+          if (usesApiGroup && activeGroup) {
+            // The server records this member as the game's (only) organizer.
+            const session = apiRepository.readSession();
+            if (!session) return "Entre na sua conta para salvar o jogo.";
+            try {
+              const created = await apiRepository.createGame(session.token, activeGroup.id, {
+                gameDate: draft.date,
+                startTime: draft.time,
+                durationMinutes: Number(draft.duration),
+                maxPlayers: Number(draft.maxPlayers),
+                minPlayers: null,
+                location: draft.location,
+                courtNumber: draft.courtNumber,
+                courtCostCents: Math.round(Number(draft.courtCost) * 100),
+                currency: draft.currency,
+                autoCancellationHours: 2,
+                paymentTrackingEnabled: draft.paymentTrackingEnabled,
+                paymentDeadlineDays: draft.paymentTrackingEnabled
+                  ? draft.paymentDeadlineDays
+                  : null,
+                paymentInfo: draft.paymentTrackingEnabled ? draft.paymentInfo : "",
+                playerNotice: draft.disclaimer,
+              });
+              await refreshApiGroups();
+              setGameId(localIdForApi(created.game.id));
+              setAccess("participant-manage");
+              return null;
+            } catch (error) {
+              return apiErrorText(error, "Não foi possível salvar o jogo.");
+            }
+          }
           const endTime = endTimeFromDuration(draft.time, draft.duration);
           const newGame = lockBalanceWindow({
             id: nextIdentifier(games),
@@ -2614,6 +2713,9 @@ export function PlayMateApp() {
                 className="primary hero-game-action"
                 onClick={() => {
                   setInviteCodeCopied(false);
+                  if (usesApiGroup && game?.apiId) {
+                    void ensureApiGameCode(game.apiId);
+                  }
                   setIsGameInviteOpen(true);
                 }}
               >
@@ -3640,7 +3742,7 @@ export function PlayMateApp() {
                 language,
               )}
             </p>
-            <input readOnly value={gameInviteCode(activeGroup, game)} />
+            <input readOnly value={shownGameCode} />
             <small className="success">
               {localize(
                 inviteCodeCopied
@@ -3663,9 +3765,7 @@ export function PlayMateApp() {
                 className="primary"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(
-                      gameInviteCode(activeGroup, game),
-                    );
+                    await navigator.clipboard.writeText(shownGameCode);
                     setInviteCodeCopied(true);
                   } catch {
                     setInviteCodeCopied(false);
@@ -3719,7 +3819,7 @@ function PlayerView({
   /** Returns false when leaving is not allowed (an owner without a successor). */
   onLeaveGroup?: () => boolean;
   canCreateGame: boolean;
-  onCreateGame: (draft: typeof emptyGame) => string | null;
+  onCreateGame: (draft: typeof emptyGame) => string | null | Promise<string | null>;
   onProfile: () => void;
   join: () => boolean;
   exit: () => void;
@@ -4065,9 +4165,9 @@ function PlayerView({
               language={language}
               onChange={setGameDraft}
               onCancel={() => setIsGameCreationOpen(false)}
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                const error = onCreateGame(gameDraft);
+                const error = await onCreateGame(gameDraft);
                 if (error) {
                   setGameCreationError(error);
                   return;

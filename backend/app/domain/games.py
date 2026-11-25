@@ -13,6 +13,7 @@ from app.db.models import Game, GameAccessRequest, GameParticipant, Group
 from app.domain.enums import (
     AccessStatus,
     CancelReason,
+    GameCreatorRole,
     GameStatus,
     GroupRole,
     ParticipantStatus,
@@ -164,6 +165,11 @@ async def viewer_access(
 
     if membership is not None:
         is_admin = membership.role in (GroupRole.OWNER, GroupRole.ADMIN)
+        # A participant who created this game organizes it, and only it.
+        is_organizer = (
+            game.created_by_role is GameCreatorRole.PARTICIPANT
+            and game.created_by_user_id == user_id
+        )
         return ViewerAccess(
             kind="admin" if is_admin else "member",
             status="active",
@@ -173,8 +179,8 @@ async def viewer_access(
             can_join=open_game,
             can_leave=open_game,
             can_update_own_payment=True,
-            can_draw_teams=is_admin and open_game,
-            can_manage_game=is_admin,
+            can_draw_teams=(is_admin or is_organizer) and open_game,
+            can_manage_game=is_admin or is_organizer,
         )
 
     request = (

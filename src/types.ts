@@ -78,6 +78,8 @@ export type GameSession = { id: number; apiId?: string; apiParticipantIdsByPlaye
 export type PlayerGroup = {
   id: string;
   apiManaged?: boolean;
+  /** API mode: a group the viewer reaches only through game codes. */
+  guestOnly?: boolean;
   publicJoinCode?: string;
   name: string;
   organizerPasscode: string;
