@@ -127,6 +127,11 @@ export function LandingPage({
     if (error instanceof ApiError && error.status === 401) {
       return language === "pt" ? "Código de acesso inválido." : "Invalid access code.";
     }
+    if (error instanceof ApiError && error.status === 429) {
+      return language === "pt"
+        ? "Muitas tentativas. Aguarde um minuto e tente novamente."
+        : "Too many attempts. Wait a minute and try again.";
+    }
     return language === "pt"
       ? "Não foi possível concluir a solicitação. Tente novamente."
       : "We could not complete the request. Please try again.";

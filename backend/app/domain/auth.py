@@ -22,7 +22,7 @@ from app.core.security import (
 )
 from app.core.time import utcnow
 from app.db.models import User, UserSession
-from app.domain.errors import NotAuthenticated
+from app.domain.errors import NotAuthenticated, TooManyRequests
 
 ACCESS_CODE_LENGTH = 8
 
@@ -42,7 +42,11 @@ class IssuedSession:
 
 
 async def start_sign_in(
-    session: AsyncSession, *, email: str, display_name: str | None = None
+    session: AsyncSession,
+    *,
+    email: str,
+    display_name: str | None = None,
+    resend_after: timedelta = timedelta(0),
 ) -> IssuedCode:
     """Find or create the user and issue a fresh access code.
 
@@ -54,6 +58,9 @@ async def start_sign_in(
             select(User).where(User.email == email).with_for_update()
         )
     ).scalar_one_or_none()
+
+    if user is not None and user.access_code_updated_at > utcnow() - resend_after:
+        raise TooManyRequests("Wait a minute before requesting another code")
 
     access_code = generate_code(ACCESS_CODE_LENGTH)
     created = user is None

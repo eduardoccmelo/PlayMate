@@ -89,18 +89,24 @@ Put the backup command in cron and copy the dump off the instance (S3 via
 
 ## 5. Things to know before real users
 
-- **Sign-in has no mailer yet.** In production the access code is *not*
-  returned by the API; it is written to the backend log
-  (`docker compose logs backend | grep "Access code"`). Until a mailer exists,
-  only someone with server access can complete a sign-in. Do **not** work
-  around this with `PLAYUP_ENVIRONMENT=development` on a public host: that
-  returns the code to whoever asks, so anyone could sign in as any email.
+- **Sign-in needs working SMTP.** In production the access code is only
+  emailed (see 2.1); the API never returns it and the log records only that
+  a code was issued. If delivery fails, sign-in returns 503 and the backend
+  log says why (`docker compose logs backend | grep "Access code email"`,
+  for example a refused connection or `SMTPAuthenticationError: 535`). Ports
+  465, 8465 and 443 use implicit TLS; other ports use STARTTLS. Do **not**
+  work around a mail problem with `PLAYUP_ENVIRONMENT=development` on a
+  public host: that returns the code to whoever asks, so anyone could sign in
+  as any email.
 - **No TLS.** Put Caddy or an Application Load Balancer with an ACM
   certificate in front of port 80, then set `WEB_PORT=8080` (or bind to
   `127.0.0.1:8080`) so nginx is only reachable through the proxy.
-- **No rate limiting** on `/v1/auth/*` or `/v1/groups/join` yet
-  (`docs/backend-plan-python.md` §9). Add it in nginx (`limit_req`) or the
-  app before the instance is public.
+- **Rate limits.** nginx allows `/api/v1/auth/*`, `/api/v1/groups/join` and
+  `/api/v1/games/join` 10 requests per minute per client IP (burst 10), then
+  answers 429. The backend also refuses a second code for the same email
+  within `PLAYUP_ACCESS_CODE_RESEND_SECONDS` (60). Behind a load balancer,
+  configure nginx `real_ip` first, or every client shares the balancer's IP
+  and its limit.
 - **The frontend does not call the API yet.** `src/services/apiClient.ts`
   exists but nothing imports it; the UI still runs on `localStorage`. The
   deployed site is therefore the browser-only prototype plus a working API
