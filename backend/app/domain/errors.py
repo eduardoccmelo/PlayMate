@@ -38,6 +38,11 @@ class ValidationFailed(DomainError):
     code = "validation_failed"
 
 
+class TooManyRequests(DomainError):
+    status_code = 429
+    code = "too_many_requests"
+
+
 class ServiceUnavailable(DomainError):
     status_code = 503
     code = "service_unavailable"

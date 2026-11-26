@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     session_ttl_days: int = 30
     #: One-time sign-in codes must have a short, server-enforced lifetime.
     access_code_ttl_minutes: int = 5
+    #: Minimum gap between two codes for one email, so the sign-in form
+    #: cannot be used to flood someone's inbox. 0 disables the check.
+    access_code_resend_seconds: int = 60
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None

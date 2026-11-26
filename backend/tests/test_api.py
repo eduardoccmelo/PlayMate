@@ -376,3 +376,15 @@ async def test_signing_out_invalidates_the_token(client: AsyncClient) -> None:
     token = await sign_in(client, "organizer@example.com", "Organizer")
     assert (await client.delete("/v1/sessions/current", headers=auth(token))).status_code == 204
     assert (await client.get("/v1/me", headers=auth(token))).status_code == 401
+
+
+async def test_a_second_code_for_the_same_email_waits_a_minute(client: AsyncClient) -> None:
+    """The sign-in form cannot be used to flood someone's inbox."""
+    first = await client.post("/v1/auth/start", json={"email": "flood@example.com"})
+    assert first.status_code == 200, first.text
+    again = await client.post("/v1/auth/start", json={"email": "flood@example.com"})
+    assert again.status_code == 429
+    assert again.json()["error"]["code"] == "too_many_requests"
+    # Other addresses are unaffected.
+    other = await client.post("/v1/auth/start", json={"email": "other@example.com"})
+    assert other.status_code == 200

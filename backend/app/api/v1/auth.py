@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter
 
@@ -6,7 +7,6 @@ from app.api.deps import SessionDep, ViewerDep
 from app.core.config import get_settings
 from app.domain import auth as auth_domain
 from app.domain.errors import ServiceUnavailable
-from app.services.mailer import Mailer
 from app.schemas.auth import (
     AccessCodeResponse,
     SessionResponse,
@@ -16,6 +16,7 @@ from app.schemas.auth import (
     UserResponse,
     VerifyRequest,
 )
+from app.services.mailer import Mailer
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -27,7 +28,10 @@ async def start_sign_in(body: StartSignInRequest, session: SessionDep) -> StartS
     if not settings.exposes_access_codes and not settings.has_smtp:
         raise ServiceUnavailable("Email delivery is not configured")
     issued = await auth_domain.start_sign_in(
-        session, email=str(body.email), display_name=body.display_name
+        session,
+        email=str(body.email),
+        display_name=body.display_name,
+        resend_after=timedelta(seconds=settings.access_code_resend_seconds),
     )
     # Commit before delivery: a received code must always correspond to a
     # durable hash. If delivery fails, the user can request a new code.
