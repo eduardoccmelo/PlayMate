@@ -52,10 +52,28 @@ is present, because production sign-in depends on emailed access codes.
 
 ## 2.1 SMTP for production sign-in
 
-Set GitHub repository secrets `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
-`SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`. AWS SES SMTP credentials are supported
-directly. The sender identity must be verified in SES; keep the account in the
-SES sandbox only while all recipient addresses are also verified.
+Production sign-in codes are sent through [SMTP2GO](https://www.smtp2go.com):
+
+1. In SMTP2GO, add and verify the sending domain under **Sending > Verified
+   Senders** (publish the DNS records it shows, so SPF and DKIM pass).
+2. Create an SMTP user under **Sending > SMTP Users**. Use a long password
+   without `$` or quotes: Compose interpolates `.env` values.
+3. Set GitHub repository secrets:
+
+   | Secret | Value |
+   | --- | --- |
+   | `SMTP_HOST` | `mail.smtp2go.com` |
+   | `SMTP_PORT` | `2525` (SMTP2GO's default; `587` also works) |
+   | `SMTP_USERNAME` | the SMTP user's username |
+   | `SMTP_PASSWORD` | the SMTP user's password |
+   | `SMTP_FROM_EMAIL` | e.g. `PlayMate Sports <no-reply@your-domain>`, on the verified domain |
+
+The workflow writes them to the instance's `.env` as `PLAYUP_SMTP_*`, and
+`docker-compose.yml` passes them to the backend container. Both ports use
+STARTTLS, and outbound 2525/587 is open from EC2 (only port 25 is throttled).
+When `VITE_DATA_SOURCE=api`, the deploy fails if a secret is missing, and
+after start-up it checks that the backend itself sees the SMTP settings. The
+backend also logs a warning at start-up in production when SMTP is missing.
 
 The production API refuses `POST /api/v1/auth/start` with HTTP 503 when SMTP
 is absent, rather than claiming a code was sent. Development continues to

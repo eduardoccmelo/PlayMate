@@ -63,7 +63,7 @@ jobs:
           VITE_DATA_SOURCE=$VITE_DATA_SOURCE
           VITE_DEMO_SEED=$VITE_DEMO_SEED
           PLAYUP_SMTP_HOST=$SMTP_HOST
-          PLAYUP_SMTP_PORT=${SMTP_PORT:-587}
+          PLAYUP_SMTP_PORT=${SMTP_PORT:-2525}
           PLAYUP_SMTP_USERNAME=$SMTP_USERNAME
           PLAYUP_SMTP_PASSWORD=$SMTP_PASSWORD
           PLAYUP_SMTP_FROM_EMAIL=$SMTP_FROM_EMAIL
@@ -72,6 +72,12 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait
           docker image prune -f
           curl -fsS http://localhost/api/health
+          # API mode needs email sign-in: prove the backend itself sees SMTP,
+          # not just that the secrets exist on the runner.
+          if [ "$VITE_DATA_SOURCE" = api ]; then
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend \
+              python -c "import sys; from app.core.config import get_settings; sys.exit(0 if get_settings().has_smtp else 'backend has no SMTP settings')"
+          fi
           EOF
           )
 

@@ -15,6 +15,11 @@ from app.domain.teams import TeamDrawError
 logging.basicConfig(level=logging.INFO)
 
 settings = get_settings()
+if settings.is_production and not settings.has_smtp:
+    # Sign-in returns 503 until this is fixed; say so where operators look.
+    logging.getLogger(__name__).warning(
+        "SMTP is not configured (PLAYUP_SMTP_*): sign-in codes cannot be sent"
+    )
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
 app.add_middleware(
