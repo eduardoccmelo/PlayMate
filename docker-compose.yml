@@ -28,6 +28,14 @@ services:
       PLAYUP_ENVIRONMENT: ${PLAYUP_ENVIRONMENT:-development}
       # JSON list. Empty by default: nginx proxies /api on the same origin.
       PLAYUP_CORS_ORIGINS: ${PLAYUP_CORS_ORIGINS:-[]}
+      # Sign-in email (SMTP2GO in production). Values in .env only reach the
+      # container when listed here; empty means "not configured".
+      PLAYUP_SMTP_HOST: ${PLAYUP_SMTP_HOST:-}
+      PLAYUP_SMTP_PORT: ${PLAYUP_SMTP_PORT:-2525}
+      PLAYUP_SMTP_USERNAME: ${PLAYUP_SMTP_USERNAME:-}
+      PLAYUP_SMTP_PASSWORD: ${PLAYUP_SMTP_PASSWORD:-}
+      PLAYUP_SMTP_FROM_EMAIL: ${PLAYUP_SMTP_FROM_EMAIL:-}
+      PLAYUP_SMTP_STARTTLS: ${PLAYUP_SMTP_STARTTLS:-true}
     depends_on:
       db:
         condition: service_healthy
